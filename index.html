@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trade Analyser</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/plugin/customParseFormat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/plugin/isoWeek.js"></script>
+</head>
+<body>
+
+<!-- Sidebar -->
+<nav id="sidebar">
+  <div id="sidebar-logo"><span style="color:var(--muted);font-weight:400;font-size:11px">DMC</span> <span style="color:var(--border)">|</span> Trade Analyser</div>
+  <div id="sidebar-nav">
+    <button class="tab-btn active" data-tab="overview"><span class="tab-icon">&#9707;</span>Dashboard</button>
+    <button class="tab-btn" data-tab="analytics"><span class="tab-icon">&#9830;</span>Analytics</button>
+    <button class="tab-btn" data-tab="tradelog"><span class="tab-icon">&#9776;</span>Trade Log</button>
+    <button class="tab-btn" data-tab="topopp"><span class="tab-icon">&#9733;</span>Top Opps</button>
+    <button class="tab-btn" data-tab="settings"><span class="tab-icon">&#9881;</span>Settings</button>
+  </div>
+  <div id="sidebar-footer">
+    <span id="fx-rate-display" class="fx-badge"></span>
+  </div>
+</nav>
+
+<div id="app">
+
+  <!-- Top bar -->
+  <header id="topbar">
+    <div id="date-filter-bar">
+      <select id="date-preset-select" class="log-filter">
+        <option value="all">All Time</option>
+        <option value="this-week">This Week</option>
+        <option value="this-month">This Month</option>
+        <option value="20d">20D Rolling</option>
+        <option value="40d">40D Rolling</option>
+        <option value="ytd">Year to Date</option>
+      </select>
+      <span class="date-sep">From</span>
+      <input type="date" id="date-from" class="date-input">
+      <span class="date-sep">to</span>
+      <input type="date" id="date-to" class="date-input">
+      <button class="btn-apply" id="apply-date-btn">Apply</button>
+    </div>
+    <div id="topbar-right">
+      <div class="r-switch-wrap" id="r-toggle-btn">
+        <span class="r-switch-label" id="r-lbl-eur">€</span>
+        <div class="r-switch-track"><div class="r-switch-thumb"></div></div>
+        <span class="r-switch-label" id="r-lbl-r">R</span>
+      </div>
+      <button id="load-csv-btn" class="btn-secondary">&#128193; Load CSV</button>
+      <span id="csv-status" class="csv-status"></span>
+    </div>
+  </header>
+
+  <!-- Hidden file input fallback -->
+  <input type="file" id="file-input" accept=".csv,.CSV" style="display:none">
+
+  <!-- Tab panels -->
+  <main id="main-content">
+    <div id="tab-overview" class="tab-panel active"></div>
+    <div id="tab-analytics" class="tab-panel"></div>
+<div id="tab-tradelog" class="tab-panel"></div>
+    <div id="tab-topopp" class="tab-panel"></div>
+    <div id="tab-settings" class="tab-panel"></div>
+  </main>
+
+  <!-- No data state -->
+  <div id="no-data-screen">
+    <div class="no-data-inner">
+      <div class="no-data-icon">&#9650;</div>
+      <h2>Trade Analyser</h2>
+      <p>Load your master fills CSV to get started.</p>
+      <button id="no-data-load-btn" class="btn-primary">&#128193; Load CSV File</button>
+      <p class="no-data-hint">Your file will be remembered across sessions.</p>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/tags.js"></script>
+<script src="js/spreads.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/metrics.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/overview.js"></script>
+<script src="js/monthly.js"></script>
+<script src="js/tradelog.js"></script>
+<script src="js/analytics.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/topopp.js"></script>
+<script src="js/rmode.js"></script>
+<script src="js/attempts.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Personal data — not source code
+trade-analyser-backup.json
+trade-analyser-settings.json
+trade-analyser-tags.json
+Tag Backups/
+
+# OS artifacts
+Thumbs.db
+.DS_Store
+*.tmp
