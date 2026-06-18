@@ -163,54 +163,6 @@ const Settings = (() => {
         </div>
 
         <div class="settings-section">
-          <h2 class="settings-heading">Charts / IG API</h2>
-          <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
-            Enter your IG Markets API credentials to enable automatic chart generation.
-            Get an API key at <a href="https://labs.ig.com/gettingstarted" target="_blank" style="color:var(--accent)">labs.ig.com/gettingstarted</a>.
-          </p>
-          <div style="display:grid;grid-template-columns:120px 1fr;gap:8px 12px;align-items:center;max-width:480px;margin-bottom:16px">
-            <label style="color:var(--muted);font-size:13px">API Key</label>
-            <input id="ig-key-input"  class="log-filter" type="text"     placeholder="Enter API key…"  value="${escHtml(localStorage.getItem('ta_ig_key')  || '')}" style="font-family:var(--font-mono);font-size:12px">
-            <label style="color:var(--muted);font-size:13px">Username</label>
-            <input id="ig-user-input" class="log-filter" type="text"     placeholder="IG username…"    value="${escHtml(localStorage.getItem('ta_ig_user') || '')}">
-            <label style="color:var(--muted);font-size:13px">Password</label>
-            <input id="ig-pass-input" class="log-filter" type="password" placeholder="IG password…">
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px">
-            <button id="ig-save-btn"    class="btn-apply">Save credentials</button>
-            <button id="ig-test-btn"    class="btn-secondary">Test connection</button>
-            <span   id="ig-cred-status" style="font-size:12px;color:var(--muted)"></span>
-          </div>
-
-          <h3 style="font-size:13px;font-weight:600;color:var(--fg);margin-bottom:8px">Instrument Epic Mapping</h3>
-          <p style="color:var(--muted);font-size:12px;margin-bottom:12px">
-            Enter the IG epic code for each instrument. Find it in the IG platform URL when viewing the instrument's chart
-            (e.g. <code style="font-family:var(--font-mono);color:var(--accent)">CC.D.LCO.USS.IP</code>).
-          </p>
-          ${[...seenProducts].sort().length === 0
-            ? '<div class="empty-state" style="font-size:12px">Load a CSV file first — instruments will appear here.</div>'
-            : `<div class="trade-table-wrap" style="max-height:300px">
-                <table>
-                  <thead><tr><th>Instrument</th><th>IG Epic</th></tr></thead>
-                  <tbody>
-                    ${[...seenProducts].sort().map(p => {
-                      const epic = IGApi.getEpics()[p] || '';
-                      return `<tr>
-                        <td style="font-weight:500">${escHtml(p)}</td>
-                        <td><input class="log-filter ig-epic-input" data-product="${escHtml(p)}"
-                          value="${escHtml(epic)}" placeholder="e.g. CC.D.LCO.USS.IP"
-                          style="width:220px;font-family:var(--font-mono);font-size:12px"></td>
-                      </tr>`;
-                    }).join('')}
-                  </tbody>
-                </table>
-              </div>
-              <button id="ig-epics-save-btn" class="btn-apply" style="margin-top:10px">Save epics</button>
-              <span   id="ig-epics-status"   style="font-size:12px;color:var(--muted);margin-left:8px"></span>`
-          }
-        </div>
-
-        <div class="settings-section">
           <h2 class="settings-heading">Asset Classes</h2>
           <p style="color:var(--muted);font-size:13px;margin-bottom:12px">
             These appear in the Asset Class dropdown for every product. Add or remove as needed.
@@ -274,7 +226,6 @@ const Settings = (() => {
     bindAssetClassControls();
     bindRowButtons();
     bindRDownside();
-    bindIGControls();
   }
 
   function exportWarningHTML() {
@@ -481,67 +432,6 @@ const Settings = (() => {
         render();
       });
     });
-  }
-
-  function bindIGControls() {
-    const saveBtn  = document.getElementById('ig-save-btn');
-    const testBtn  = document.getElementById('ig-test-btn');
-    const statusEl = document.getElementById('ig-cred-status');
-
-    if (saveBtn) {
-      saveBtn.addEventListener('click', () => {
-        const key  = document.getElementById('ig-key-input').value.trim();
-        const user = document.getElementById('ig-user-input').value.trim();
-        const pass = document.getElementById('ig-pass-input').value;
-        if (!key || !user || !pass) {
-          if (statusEl) { statusEl.textContent = 'Fill in all three fields.'; statusEl.style.color = 'var(--red)'; }
-          return;
-        }
-        localStorage.setItem('ta_ig_key',  key);
-        localStorage.setItem('ta_ig_user', user);
-        localStorage.setItem('ta_ig_pass', pass);
-        if (statusEl) { statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)'; }
-        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
-      });
-    }
-
-    if (testBtn) {
-      testBtn.addEventListener('click', async () => {
-        if (statusEl) { statusEl.textContent = 'Testing…'; statusEl.style.color = 'var(--muted)'; }
-        testBtn.disabled = true;
-        try {
-          // Save current field values first if non-empty
-          const key  = document.getElementById('ig-key-input').value.trim();
-          const user = document.getElementById('ig-user-input').value.trim();
-          const pass = document.getElementById('ig-pass-input').value;
-          if (key)  localStorage.setItem('ta_ig_key',  key);
-          if (user) localStorage.setItem('ta_ig_user', user);
-          if (pass) localStorage.setItem('ta_ig_pass', pass);
-          await IGApi.authenticate();
-          if (statusEl) { statusEl.textContent = 'Connected ✓'; statusEl.style.color = 'var(--green)'; }
-        } catch (err) {
-          if (statusEl) { statusEl.textContent = err.message; statusEl.style.color = 'var(--red)'; }
-        } finally {
-          testBtn.disabled = false;
-        }
-      });
-    }
-
-    const epicsBtn    = document.getElementById('ig-epics-save-btn');
-    const epicsStatus = document.getElementById('ig-epics-status');
-    if (epicsBtn) {
-      epicsBtn.addEventListener('click', () => {
-        const epics = {};
-        document.querySelectorAll('.ig-epic-input').forEach(input => {
-          const product = input.dataset.product;
-          const epic    = input.value.trim();
-          if (product && epic) epics[product] = epic;
-        });
-        IGApi.saveEpics(epics);
-        if (epicsStatus) { epicsStatus.textContent = 'Saved.'; epicsStatus.style.color = 'var(--green)'; }
-        setTimeout(() => { if (epicsStatus) epicsStatus.textContent = ''; }, 3000);
-      });
-    }
   }
 
   function escHtml(str) {

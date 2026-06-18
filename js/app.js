@@ -277,7 +277,6 @@ const App = (() => {
   async function init() {
     // Init trade log modal
     TradeLog.init();
-    TradeChart.init();
 
     // Tab buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {
