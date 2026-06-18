@@ -242,11 +242,12 @@ const App = (() => {
 
   function openIDB() {
     return new Promise((res, rej) => {
-      const req = indexedDB.open('trade-analyser', 2);
+      const req = indexedDB.open('trade-analyser', 3);
       req.onupgradeneeded = e => {
         const db = e.target.result;
-        if (!db.objectStoreNames.contains('store')) db.createObjectStore('store');
-        if (!db.objectStoreNames.contains('tags'))  db.createObjectStore('tags');
+        if (!db.objectStoreNames.contains('store'))  db.createObjectStore('store');
+        if (!db.objectStoreNames.contains('tags'))   db.createObjectStore('tags');
+        if (!db.objectStoreNames.contains('charts')) db.createObjectStore('charts');
       };
       req.onsuccess = e => res(e.target.result);
       req.onerror   = e => rej(e);
@@ -276,6 +277,7 @@ const App = (() => {
   async function init() {
     // Init trade log modal
     TradeLog.init();
+    TradeChart.init();
 
     // Tab buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {

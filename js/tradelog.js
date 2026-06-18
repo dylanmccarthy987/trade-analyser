@@ -67,6 +67,8 @@ const TradeLog = (() => {
           ${strategies.map(s => `<option value="${escHtml(s)}" ${s === filterStrategy ? 'selected' : ''}>${escHtml(s)}</option>`).join('')}
         </select>
         <span class="log-count">${rows.length} trade${rows.length !== 1 ? 's' : ''}</span>
+        <button id="generate-charts-btn" class="btn-secondary" style="font-size:12px;padding:4px 10px">&#128202; Generate charts</button>
+        <span id="generate-charts-status" style="font-size:11px;color:var(--muted)"></span>
       </div>
 
       ${openTrades.length ? `
@@ -315,7 +317,10 @@ const TradeLog = (() => {
       <td>${escHtml(t.strategy    || '')}</td>
       <td>${escHtml(t.substrategy || '')}</td>
       <td class="mono" style="max-width:140px;overflow:hidden;text-overflow:ellipsis">${escHtml(t.notes || '')}</td>
-      <td><button class="tag-btn ${tagged ? 'tagged' : ''}" data-trade-id="${escHtml(t.tradeId)}">&#9998;</button></td>
+      <td style="white-space:nowrap">
+        <button class="tag-btn ${tagged ? 'tagged' : ''}" data-trade-id="${escHtml(t.tradeId)}">&#9998;</button>
+        <button class="chart-btn" data-chart-id="${escHtml(t.tradeId)}" title="View chart">&#128202;</button>
+      </td>
     </tr>`;
   }
 
@@ -343,6 +348,7 @@ const TradeLog = (() => {
       <td style="white-space:nowrap">
         <button class="tag-btn ${tagged ? 'tagged' : ''}" data-trade-id="${escHtml(t.spreadId)}" title="Tag spread">&#9998;</button>
         <button class="tag-btn" style="color:var(--red);margin-left:4px" data-unmerge="${escHtml(t.spreadId)}" title="Unmerge">&#10006;</button>
+        <button class="chart-btn" data-chart-id="${escHtml(t.spreadId)}" title="View chart">&#128202;</button>
       </td>
     </tr>`;
   }
@@ -371,6 +377,7 @@ const TradeLog = (() => {
       <td style="white-space:nowrap">
         <button class="tag-btn ${tagged ? 'tagged' : ''}" data-trade-id="${escHtml(t.attemptId)}" title="Tag attempt">&#9998;</button>
         <button class="tag-btn" style="color:var(--red);margin-left:4px" data-unattempt="${escHtml(t.attemptId)}" title="Unmerge attempt">&#10006;</button>
+        <button class="chart-btn" data-chart-id="${escHtml(t.attemptId)}" title="View chart">&#128202;</button>
       </td>
     </tr>`;
   }
@@ -441,7 +448,13 @@ const TradeLog = (() => {
         const unmergeBtn = e.target.closest('[data-unmerge]');
         if (unmergeBtn) { Spreads.unmerge(unmergeBtn.dataset.unmerge); Analytics.invalidateCache(); renderTable(false); return; }
         const unattemptBtn = e.target.closest('[data-unattempt]');
-        if (unattemptBtn) { Attempts.unmerge(unattemptBtn.dataset.unattempt); Analytics.invalidateCache(); renderTable(false); }
+        if (unattemptBtn) { Attempts.unmerge(unattemptBtn.dataset.unattempt); Analytics.invalidateCache(); renderTable(false); return; }
+        const chartBtn = e.target.closest('.chart-btn[data-chart-id]');
+        if (chartBtn) {
+          const id    = chartBtn.dataset.chartId;
+          const trade = _rows.find(t => t.tradeId === id || t.spreadId === id || t.attemptId === id);
+          if (trade) TradeChart.open(trade);
+        }
       });
     }
 
@@ -490,6 +503,20 @@ const TradeLog = (() => {
     const clearBtn = document.getElementById('clear-selection-btn');
     if (clearBtn) {
       clearBtn.addEventListener('click', () => { checkedIds.clear(); renderTable(false); });
+    }
+
+    // Generate charts button — bulk fetch from IG for all visible individual trades
+    const genBtn = document.getElementById('generate-charts-btn');
+    if (genBtn) {
+      genBtn.addEventListener('click', async () => {
+        genBtn.disabled = true;
+        const statusEl = document.getElementById('generate-charts-status');
+        await TradeChart.bulkGenerate(_rows, (msg, isDone) => {
+          if (statusEl) statusEl.textContent = msg;
+          if (isDone) genBtn.disabled = false;
+        });
+        if (genBtn.disabled) genBtn.disabled = false;
+      });
     }
 
     // Sync bar state with current checkedIds (important after renderTable(false) preserves selection)
