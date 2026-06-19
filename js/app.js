@@ -33,8 +33,8 @@ const App = (() => {
     switch (preset) {
       case 'today':      from = today; to = today; break;
       case 'yesterday':  from = today.subtract(1,'day'); to = today.subtract(1,'day'); break;
-      case 'this-week':  from = today.startOf('isoWeek'); to = today.endOf('isoWeek'); break;
-      case 'last-week':  from = today.subtract(1,'week').startOf('isoWeek'); to = today.subtract(1,'week').endOf('isoWeek'); break;
+      case 'this-week':  from = today.day(0); to = today.day(6); break;
+      case 'last-week':  from = today.subtract(1,'week').day(0); to = today.subtract(1,'week').day(6); break;
       case 'this-month': from = today.startOf('month'); to = today.endOf('month'); break;
       case 'last-month': from = today.subtract(1,'month').startOf('month'); to = today.subtract(1,'month').endOf('month'); break;
       case '20d':        from = today.subtract(19,'day'); to = today; break;
