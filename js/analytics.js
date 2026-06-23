@@ -196,7 +196,10 @@ const Analytics = (() => {
     // Group by baseProduct
     const byProduct = {};
     for (const t of subset) {
-      const key = stripMonths(t.baseProduct || t.product);
+      const stripped = stripMonths(t.baseProduct || t.product);
+      // Calendar spread: after stripping months, no '-' remains (e.g. "Silver May26-Aug26" → "Silver")
+      // Outright spread: '-' remains (e.g. "ICE Brent-WTI Jul26" → "ICE Brent-WTI")
+      const key = (t.isSpread && !stripped.includes('-')) ? stripped + ' Cal' : stripped;
       if (!byProduct[key]) byProduct[key] = [];
       byProduct[key].push(t);
     }
