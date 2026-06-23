@@ -212,10 +212,21 @@ const Analytics = (() => {
         const pnl     = R ? RMode.sumR(ts) : ts.reduce((s, t) => s + (t.pnlEUR ?? 0), 0);
         const maxSize = Math.max(...ts.map(t => t.totalContracts ?? 0));
         const avgSize = ts.reduce((s, t) => s + (t.totalContracts ?? 0), 0) / ts.length;
-        const avgLossPerLot = losers.length
-          ? losers.reduce((s, t) => s + (t.pnlEUR ?? 0) / (t.totalContracts || 1), 0) / losers.length
+        const lossPerLot = losers.map(t => (t.pnlEUR ?? 0) / (t.totalContracts || 1))
+                                 .sort((a, b) => a - b); // ascending (most negative first)
+        const avgLossPerLot = lossPerLot.length
+          ? lossPerLot.reduce((s, v) => s + v, 0) / lossPerLot.length
           : null;
-        return { product, count: ts.length, winRate, pnl, maxSize, avgSize, avgLossPerLot };
+        const medLossPerLot = lossPerLot.length
+          ? (lossPerLot.length % 2 === 1
+              ? lossPerLot[Math.floor(lossPerLot.length / 2)]
+              : (lossPerLot[lossPerLot.length / 2 - 1] + lossPerLot[lossPerLot.length / 2]) / 2)
+          : null;
+        const top5 = lossPerLot.slice(0, 5);
+        const avg5LossPerLot = top5.length
+          ? top5.reduce((s, v) => s + v, 0) / top5.length
+          : null;
+        return { product, count: ts.length, winRate, pnl, maxSize, avgSize, avgLossPerLot, medLossPerLot, avg5LossPerLot };
       })
       .sort((a, b) => b.pnl - a.pnl);
 
@@ -223,7 +234,8 @@ const Analytics = (() => {
     return `<table class="stats-table">
       <thead><tr>
         <th>Product</th><th>Trades</th><th>Win%</th>
-        <th>P&amp;L (${lbl})</th><th>Max Size (lots)</th><th>Avg Size (lots)</th><th>Avg Loss/Lot (${lbl})</th>
+        <th>P&amp;L (${lbl})</th><th>Max Size (lots)</th><th>Avg Size (lots)</th>
+        <th>Avg Loss/Lot (${lbl})</th><th>Median Loss/Lot (${lbl})</th><th>Avg Top 5 Loss/Lot (${lbl})</th>
       </tr></thead>
       <tbody>
         ${rows.map(r => `<tr>
@@ -233,7 +245,9 @@ const Analytics = (() => {
           <td style="color:${r.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">${pf(r.pnl)}</td>
           <td class="mono">${r.maxSize}</td>
           <td class="mono">${r.avgSize.toFixed(1)}</td>
-          <td style="color:var(--red)">${r.avgLossPerLot !== null ? pf(r.avgLossPerLot) : '—'}</td>
+          <td style="color:var(--red)">${r.avgLossPerLot    !== null ? pf(r.avgLossPerLot)    : '—'}</td>
+          <td style="color:var(--red)">${r.medLossPerLot    !== null ? pf(r.medLossPerLot)    : '—'}</td>
+          <td style="color:var(--red)">${r.avg5LossPerLot   !== null ? pf(r.avg5LossPerLot)   : '—'}</td>
         </tr>`).join('')}
       </tbody>
     </table>`;
