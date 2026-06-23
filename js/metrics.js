@@ -237,9 +237,7 @@ const Metrics = (() => {
 function fmtEUR(val) {
   if (val === null || val === undefined) return '—';
   const abs = Math.abs(val);
-  const str = abs >= 10000
-    ? abs.toLocaleString('en-IE', { maximumFractionDigits: 0 })
-    : abs.toLocaleString('en-IE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const str = abs.toLocaleString('en-IE', { maximumFractionDigits: 0 });
   return (val >= 0 ? '+€' : '-€') + str;
 }
 
