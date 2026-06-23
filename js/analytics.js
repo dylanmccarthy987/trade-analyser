@@ -196,7 +196,7 @@ const Analytics = (() => {
     // Group by baseProduct
     const byProduct = {};
     for (const t of subset) {
-      const key = stripContractMonth(t.baseProduct || t.product);
+      const key = stripMonths(t.baseProduct || t.product);
       if (!byProduct[key]) byProduct[key] = [];
       byProduct[key].push(t);
     }
@@ -238,6 +238,16 @@ const Analytics = (() => {
     sel.addEventListener('change', () => {
       tbl.innerHTML = strategyProductTable(_filteredTrades, sel.value);
     });
+  }
+
+  // Strips all contract month+year tokens (e.g. JUN26, Aug26) and cleans
+  // up leftover separators — handles both trailing months and calendar
+  // spread names like "Silver May26-Aug26" → "Silver".
+  function stripMonths(str) {
+    return String(str || '')
+      .replace(/\s*(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\d{2}/gi, '')
+      .replace(/-$/, '')
+      .trim();
   }
 
   function escHtml(str) {
