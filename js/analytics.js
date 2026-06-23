@@ -232,7 +232,7 @@ const Analytics = (() => {
         const maxLots     = (worstPerLot !== null && worstPerLot < 0 && downside)
           ? Math.floor(downside / Math.abs(worstPerLot))
           : null;
-        return { product, count: ts.length, winRate, pnl, maxSize, avgSize, avgLossPerLot, medLossPerLot, avg5LossPerLot, maxLots };
+        return { product, count: ts.length, winRate, pnl, maxSize, avgSize, maxLots };
       })
       .sort((a, b) => b.pnl - a.pnl);
 
@@ -241,8 +241,7 @@ const Analytics = (() => {
       <thead><tr>
         <th>Product</th><th>Trades</th><th>Win%</th>
         <th>P&amp;L (${lbl})</th><th>Max Size (lots)</th><th>Avg Size (lots)</th>
-        <th>Avg Loss/Lot (${lbl})</th><th>Median Loss/Lot (${lbl})</th><th>Avg Top 5 Loss/Lot (${lbl})</th>
-        <th style="color:var(--accent)">Max Lots</th>
+        <th style="color:var(--accent)">Theoretical Max Size</th>
       </tr></thead>
       <tbody>
         ${rows.map(r => `<tr>
@@ -252,9 +251,6 @@ const Analytics = (() => {
           <td style="color:${r.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">${pf(r.pnl)}</td>
           <td class="mono">${r.maxSize}</td>
           <td class="mono">${r.avgSize.toFixed(1)}</td>
-          <td style="color:var(--red)">${r.avgLossPerLot  !== null ? pf(r.avgLossPerLot)  : '—'}</td>
-          <td style="color:var(--red)">${r.medLossPerLot  !== null ? pf(r.medLossPerLot)  : '—'}</td>
-          <td style="color:var(--red)">${r.avg5LossPerLot !== null ? pf(r.avg5LossPerLot) : '—'}</td>
           <td class="mono" style="font-weight:600;color:var(--accent)">${r.maxLots !== null ? r.maxLots : '—'}</td>
         </tr>`).join('')}
       </tbody>
