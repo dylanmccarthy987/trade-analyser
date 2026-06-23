@@ -196,7 +196,7 @@ const Analytics = (() => {
     // Group by baseProduct
     const byProduct = {};
     for (const t of subset) {
-      const key = t.baseProduct || t.product;
+      const key = stripContractMonth(t.baseProduct || t.product);
       if (!byProduct[key]) byProduct[key] = [];
       byProduct[key].push(t);
     }
