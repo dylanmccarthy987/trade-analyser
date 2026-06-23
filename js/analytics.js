@@ -207,11 +207,15 @@ const Analytics = (() => {
     const rows = Object.entries(byProduct)
       .map(([product, ts]) => {
         const wins    = ts.filter(t => (t.pnlEUR ?? 0) > 0);
+        const losers  = ts.filter(t => (t.pnlEUR ?? 0) < 0);
         const winRate = ts.length ? wins.length / ts.length : 0;
         const pnl     = R ? RMode.sumR(ts) : ts.reduce((s, t) => s + (t.pnlEUR ?? 0), 0);
         const maxSize = Math.max(...ts.map(t => t.totalContracts ?? 0));
         const avgSize = ts.reduce((s, t) => s + (t.totalContracts ?? 0), 0) / ts.length;
-        return { product, count: ts.length, winRate, pnl, maxSize, avgSize };
+        const avgLossPerLot = losers.length
+          ? losers.reduce((s, t) => s + (t.pnlEUR ?? 0) / (t.totalContracts || 1), 0) / losers.length
+          : null;
+        return { product, count: ts.length, winRate, pnl, maxSize, avgSize, avgLossPerLot };
       })
       .sort((a, b) => b.pnl - a.pnl);
 
@@ -219,7 +223,7 @@ const Analytics = (() => {
     return `<table class="stats-table">
       <thead><tr>
         <th>Product</th><th>Trades</th><th>Win%</th>
-        <th>P&amp;L (${lbl})</th><th>Max Size (lots)</th><th>Avg Size (lots)</th>
+        <th>P&amp;L (${lbl})</th><th>Max Size (lots)</th><th>Avg Size (lots)</th><th>Avg Loss/Lot (${lbl})</th>
       </tr></thead>
       <tbody>
         ${rows.map(r => `<tr>
@@ -229,6 +233,7 @@ const Analytics = (() => {
           <td style="color:${r.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">${pf(r.pnl)}</td>
           <td class="mono">${r.maxSize}</td>
           <td class="mono">${r.avgSize.toFixed(1)}</td>
+          <td style="color:var(--red)">${r.avgLossPerLot !== null ? pf(r.avgLossPerLot) : '—'}</td>
         </tr>`).join('')}
       </tbody>
     </table>`;
