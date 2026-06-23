@@ -226,7 +226,13 @@ const Analytics = (() => {
         const avg5LossPerLot = top5.length
           ? top5.reduce((s, v) => s + v, 0) / top5.length
           : null;
-        return { product, count: ts.length, winRate, pnl, maxSize, avgSize, avgLossPerLot, medLossPerLot, avg5LossPerLot };
+        const candidates = [avgLossPerLot, medLossPerLot, avg5LossPerLot].filter(v => v !== null);
+        const worstPerLot = candidates.length ? Math.min(...candidates) : null;
+        const downside    = RMode.getCurrent();
+        const maxLots     = (worstPerLot !== null && worstPerLot < 0 && downside)
+          ? Math.floor(downside / Math.abs(worstPerLot))
+          : null;
+        return { product, count: ts.length, winRate, pnl, maxSize, avgSize, avgLossPerLot, medLossPerLot, avg5LossPerLot, maxLots };
       })
       .sort((a, b) => b.pnl - a.pnl);
 
@@ -236,6 +242,7 @@ const Analytics = (() => {
         <th>Product</th><th>Trades</th><th>Win%</th>
         <th>P&amp;L (${lbl})</th><th>Max Size (lots)</th><th>Avg Size (lots)</th>
         <th>Avg Loss/Lot (${lbl})</th><th>Median Loss/Lot (${lbl})</th><th>Avg Top 5 Loss/Lot (${lbl})</th>
+        <th style="color:var(--accent)">Max Lots</th>
       </tr></thead>
       <tbody>
         ${rows.map(r => `<tr>
@@ -245,9 +252,10 @@ const Analytics = (() => {
           <td style="color:${r.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">${pf(r.pnl)}</td>
           <td class="mono">${r.maxSize}</td>
           <td class="mono">${r.avgSize.toFixed(1)}</td>
-          <td style="color:var(--red)">${r.avgLossPerLot    !== null ? pf(r.avgLossPerLot)    : '—'}</td>
-          <td style="color:var(--red)">${r.medLossPerLot    !== null ? pf(r.medLossPerLot)    : '—'}</td>
-          <td style="color:var(--red)">${r.avg5LossPerLot   !== null ? pf(r.avg5LossPerLot)   : '—'}</td>
+          <td style="color:var(--red)">${r.avgLossPerLot  !== null ? pf(r.avgLossPerLot)  : '—'}</td>
+          <td style="color:var(--red)">${r.medLossPerLot  !== null ? pf(r.medLossPerLot)  : '—'}</td>
+          <td style="color:var(--red)">${r.avg5LossPerLot !== null ? pf(r.avg5LossPerLot) : '—'}</td>
+          <td class="mono" style="font-weight:600;color:var(--accent)">${r.maxLots !== null ? r.maxLots : '—'}</td>
         </tr>`).join('')}
       </tbody>
     </table>`;
