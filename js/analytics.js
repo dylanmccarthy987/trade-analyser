@@ -1,12 +1,14 @@
 // Renders the Analytics tab — scrollable grid of stat cards
 
 const Analytics = (() => {
-  let _cache = null;
+  let _cache          = null;
+  let _filteredTrades = [];   // held so strategy dropdown can re-filter without a full render
 
   function invalidateCache() { _cache = null; }
 
   function render(trades, dateRange) {
     const filtered = App.filterTrades(trades, dateRange);
+    _filteredTrades = filtered;
     const el = document.getElementById('tab-analytics');
 
     if (!filtered.length) {
@@ -35,6 +37,11 @@ const Analytics = (() => {
 
     el.innerHTML = `
       <div class="analytics-grid">
+
+        <div class="analytics-card wide">
+          <div class="chart-title">Strategy Breakdown by Product</div>
+          ${strategyBreakdownCard(filtered)}
+        </div>
 
         <div class="analytics-card wide">
           <div class="chart-title">Performance by Strategy</div>
@@ -108,6 +115,8 @@ const Analytics = (() => {
 
     Charts.byHour('ac-hour', hourData);
     Charts.byDayOfWeek('ac-dow', dowData);
+
+    bindStrategyFilter();
   }
 
   function statsTable(groups) {
@@ -154,6 +163,81 @@ const Analytics = (() => {
         }).join('')}
       </tbody>
     </table>`;
+  }
+
+  function strategyBreakdownCard(trades) {
+    const strategies = [...new Set(trades.map(t => t.strategy).filter(Boolean))].sort();
+    const options = strategies.map(s =>
+      `<option value="${escHtml(s)}">${escHtml(s)}</option>`
+    ).join('');
+    const firstStrategy = strategies[0] || '';
+    return `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <label style="color:var(--muted);font-size:13px">Strategy</label>
+        <select id="strat-breakdown-select" class="log-filter" style="width:220px">
+          ${strategies.length
+            ? options
+            : '<option value="">No tagged trades in this period</option>'}
+        </select>
+      </div>
+      <div id="strat-breakdown-table">
+        ${strategyProductTable(trades, firstStrategy)}
+      </div>`;
+  }
+
+  function strategyProductTable(trades, strategy) {
+    if (!strategy) return `<div class="empty-state" style="padding:16px">No strategies tagged in this period.</div>`;
+    const R  = RMode.isActive();
+    const pf = R ? RMode.fmtR.bind(RMode) : fmtEUR;
+
+    const subset = trades.filter(t => t.strategy === strategy);
+    if (!subset.length) return `<div class="empty-state" style="padding:16px">No trades for this strategy.</div>`;
+
+    // Group by baseProduct
+    const byProduct = {};
+    for (const t of subset) {
+      const key = t.baseProduct || t.product;
+      if (!byProduct[key]) byProduct[key] = [];
+      byProduct[key].push(t);
+    }
+
+    const rows = Object.entries(byProduct)
+      .map(([product, ts]) => {
+        const wins    = ts.filter(t => (t.pnlEUR ?? 0) > 0);
+        const winRate = ts.length ? wins.length / ts.length : 0;
+        const pnl     = R ? RMode.sumR(ts) : ts.reduce((s, t) => s + (t.pnlEUR ?? 0), 0);
+        const maxSize = Math.max(...ts.map(t => t.totalContracts ?? 0));
+        const avgSize = ts.reduce((s, t) => s + (t.totalContracts ?? 0), 0) / ts.length;
+        return { product, count: ts.length, winRate, pnl, maxSize, avgSize };
+      })
+      .sort((a, b) => b.pnl - a.pnl);
+
+    const lbl = R ? 'R' : '€';
+    return `<table class="stats-table">
+      <thead><tr>
+        <th>Product</th><th>Trades</th><th>Win%</th>
+        <th>P&amp;L (${lbl})</th><th>Max Size (lots)</th><th>Avg Size (lots)</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td style="font-weight:500">${escHtml(r.product)}</td>
+          <td>${r.count}</td>
+          <td>${fmtPct(r.winRate)}</td>
+          <td style="color:${r.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">${pf(r.pnl)}</td>
+          <td class="mono">${r.maxSize}</td>
+          <td class="mono">${r.avgSize.toFixed(1)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  }
+
+  function bindStrategyFilter() {
+    const sel = document.getElementById('strat-breakdown-select');
+    const tbl = document.getElementById('strat-breakdown-table');
+    if (!sel || !tbl) return;
+    sel.addEventListener('change', () => {
+      tbl.innerHTML = strategyProductTable(_filteredTrades, sel.value);
+    });
   }
 
   function escHtml(str) {
