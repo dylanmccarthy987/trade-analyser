@@ -4,6 +4,9 @@ trade-analyser-settings.json
 trade-analyser-tags.json
 Tag Backups/
 
+# Local scripts (contain credentials)
+send-backup.ps1
+
 # OS artifacts
 Thumbs.db
 .DS_Store

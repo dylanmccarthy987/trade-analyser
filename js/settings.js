@@ -4,7 +4,10 @@
 const Settings = (() => {
   const STORAGE_KEY      = 'ta_product_config';
   const AC_STORAGE_KEY   = 'ta_asset_classes';
-  const LAST_EXPORT_KEY  = 'ta_last_export_ts';
+  const LAST_EXPORT_KEY    = 'ta_last_export_ts';
+  const BACKUP_HANDLE_KEY  = 'ta_backup_handle';
+  const BACKUP_NAME_KEY    = 'ta_backup_name';
+  const BACKUP_WRITTEN_KEY = 'ta_backup_written';
 
   const DEFAULT_ASSET_CLASSES = [
     'Energy', 'Metals', 'Equity Index', 'Livestock',
@@ -39,9 +42,11 @@ const Settings = (() => {
   }
 
   function render() {
-    const el          = document.getElementById('tab-settings');
-    const cfg         = loadUserConfig();
+    const el           = document.getElementById('tab-settings');
+    const cfg          = loadUserConfig();
     const assetClasses = loadAssetClasses().sort((a, b) => a.localeCompare(b));
+    const backupName   = localStorage.getItem(BACKUP_NAME_KEY) || '';
+    const lastWritten  = localStorage.getItem(BACKUP_WRITTEN_KEY) || '';
 
     const seenProducts = new Set([
       ...App.state.trades.map(t => t.baseProduct),
@@ -127,6 +132,24 @@ const Settings = (() => {
 
     el.innerHTML = `
       <div style="max-width:900px">
+
+        <div class="settings-section">
+          <h2 class="settings-heading">Script Backup</h2>
+          <p style="color:var(--muted);font-size:13px;margin-bottom:12px">
+            Writes a full backup to a fixed file on disk. Run <code>send-backup.ps1</code> to email it
+            and create a dated rolling copy in your <em>Tag Backups</em> folder.
+          </p>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+            <button id="set-backup-loc-btn" class="btn-secondary">Set backup location</button>
+            <span style="color:var(--muted);font-size:13px">${backupName ? escHtml(backupName) : 'No location set'}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <button id="write-backup-btn" class="btn-apply" ${!backupName ? 'disabled' : ''}>Write backup now</button>
+            <span id="backup-write-status" style="font-size:13px;color:var(--muted)">
+              ${lastWritten ? 'Last written: ' + dayjs(+lastWritten).format('DD MMM HH:mm') : ''}
+            </span>
+          </div>
+        </div>
 
         <div class="settings-section">
           <h2 class="settings-heading">Import / Export</h2>
@@ -222,6 +245,7 @@ const Settings = (() => {
       </div>
     `;
 
+    bindBackupControls();
     bindImportExport();
     bindAssetClassControls();
     bindRowButtons();
@@ -431,6 +455,96 @@ const Settings = (() => {
         Analytics.invalidateCache();
         render();
       });
+    });
+  }
+
+  function _openIDB() {
+    return new Promise((res, rej) => {
+      const req = indexedDB.open('trade-analyser', 3);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('store'))  db.createObjectStore('store');
+        if (!db.objectStoreNames.contains('tags'))   db.createObjectStore('tags');
+        if (!db.objectStoreNames.contains('charts')) db.createObjectStore('charts');
+      };
+      req.onsuccess = e => res(e.target.result);
+      req.onerror   = () => rej(req.error);
+    });
+  }
+
+  function _idbGet(db, key) {
+    return new Promise((res, rej) => {
+      const tx = db.transaction('store', 'readonly');
+      const req = tx.objectStore('store').get(key);
+      req.onsuccess = () => res(req.result);
+      req.onerror   = () => rej(req.error);
+    });
+  }
+
+  function _idbSet(db, key, val) {
+    return new Promise((res, rej) => {
+      const tx = db.transaction('store', 'readwrite');
+      const req = tx.objectStore('store').put(val, key);
+      req.onsuccess = () => res();
+      req.onerror   = () => rej(req.error);
+    });
+  }
+
+  function bindBackupControls() {
+    const setBtn   = document.getElementById('set-backup-loc-btn');
+    const writeBtn = document.getElementById('write-backup-btn');
+    if (!setBtn || !writeBtn) return;
+
+    setBtn.addEventListener('click', async () => {
+      if (!('showSaveFilePicker' in window)) {
+        alert('Your browser does not support the File System Access API. Use Chrome or Edge.');
+        return;
+      }
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: 'trade-analyser-backup.json',
+          types: [{ description: 'JSON backup', accept: { 'application/json': ['.json'] } }],
+        });
+        const db = await _openIDB();
+        await _idbSet(db, BACKUP_HANDLE_KEY, handle);
+        localStorage.setItem(BACKUP_NAME_KEY, handle.name);
+        render();
+      } catch (e) {
+        if (e.name !== 'AbortError') console.error('[Settings] Set backup location error:', e);
+      }
+    });
+
+    writeBtn.addEventListener('click', async () => {
+      const statusEl = document.getElementById('backup-write-status');
+      try {
+        const db     = await _openIDB();
+        const handle = await _idbGet(db, BACKUP_HANDLE_KEY);
+        if (!handle) { alert('Set a backup location first.'); return; }
+
+        const perm    = await handle.queryPermission({ mode: 'readwrite' });
+        const granted = perm === 'granted'
+          ? 'granted'
+          : await handle.requestPermission({ mode: 'readwrite' });
+        if (granted !== 'granted') { alert('Write permission denied.'); return; }
+
+        const payload = {
+          productConfig: loadUserConfig(),
+          assetClasses:  loadAssetClasses(),
+          tags:          Tags.exportAll(),
+          spreads:       Spreads.exportAll(),
+          attempts:      Attempts.exportAll(),
+          rLog:          RMode.exportLog(),
+        };
+        const writable = await handle.createWritable();
+        await writable.write(JSON.stringify(payload, null, 2));
+        await writable.close();
+        localStorage.setItem(BACKUP_WRITTEN_KEY, String(Date.now()));
+        if (statusEl) { statusEl.textContent = 'Written ✓'; statusEl.style.color = 'var(--green)'; }
+        setTimeout(() => render(), 1500);
+      } catch (e) {
+        console.error('[Settings] Write backup error:', e);
+        if (statusEl) { statusEl.textContent = 'Write failed — see console'; statusEl.style.color = 'var(--red)'; }
+      }
     });
   }
 
