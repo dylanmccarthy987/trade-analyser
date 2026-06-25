@@ -140,8 +140,8 @@ const Settings = (() => {
             and create a dated rolling copy in your <em>Tag Backups</em> folder.
           </p>
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-            <button id="set-backup-loc-btn" class="btn-secondary">Set backup location</button>
-            <span style="color:var(--muted);font-size:13px">${backupName ? escHtml(backupName) : 'No location set'}</span>
+            <button id="set-backup-loc-btn" class="btn-secondary">Set backup folder</button>
+            <span style="color:var(--muted);font-size:13px">${backupName ? escHtml(backupName) : 'No folder set'}</span>
           </div>
           <div style="display:flex;align-items:center;gap:12px">
             <button id="write-backup-btn" class="btn-apply" ${!backupName ? 'disabled' : ''}>Write backup now</button>
@@ -496,35 +496,32 @@ const Settings = (() => {
     if (!setBtn || !writeBtn) return;
 
     setBtn.addEventListener('click', async () => {
-      if (!('showSaveFilePicker' in window)) {
+      if (!('showDirectoryPicker' in window)) {
         alert('Your browser does not support the File System Access API. Use Chrome or Edge.');
         return;
       }
       try {
-        const handle = await window.showSaveFilePicker({
-          suggestedName: 'trade-analyser-backup.json',
-          types: [{ description: 'JSON backup', accept: { 'application/json': ['.json'] } }],
-        });
+        const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
         const db = await _openIDB();
-        await _idbSet(db, BACKUP_HANDLE_KEY, handle);
-        localStorage.setItem(BACKUP_NAME_KEY, handle.name);
+        await _idbSet(db, BACKUP_HANDLE_KEY, dirHandle);
+        localStorage.setItem(BACKUP_NAME_KEY, dirHandle.name);
         render();
       } catch (e) {
-        if (e.name !== 'AbortError') console.error('[Settings] Set backup location error:', e);
+        if (e.name !== 'AbortError') console.error('[Settings] Set backup folder error:', e);
       }
     });
 
     writeBtn.addEventListener('click', async () => {
       const statusEl = document.getElementById('backup-write-status');
       try {
-        const db     = await _openIDB();
-        const handle = await _idbGet(db, BACKUP_HANDLE_KEY);
-        if (!handle) { alert('Set a backup location first.'); return; }
+        const db        = await _openIDB();
+        const dirHandle = await _idbGet(db, BACKUP_HANDLE_KEY);
+        if (!dirHandle) { alert('Set a backup folder first.'); return; }
 
-        const perm    = await handle.queryPermission({ mode: 'readwrite' });
+        const perm    = await dirHandle.queryPermission({ mode: 'readwrite' });
         const granted = perm === 'granted'
           ? 'granted'
-          : await handle.requestPermission({ mode: 'readwrite' });
+          : await dirHandle.requestPermission({ mode: 'readwrite' });
         if (granted !== 'granted') { alert('Write permission denied.'); return; }
 
         const payload = {
@@ -535,9 +532,30 @@ const Settings = (() => {
           attempts:      Attempts.exportAll(),
           rLog:          RMode.exportLog(),
         };
-        const writable = await handle.createWritable();
-        await writable.write(JSON.stringify(payload, null, 2));
-        await writable.close();
+        const json = JSON.stringify(payload, null, 2);
+
+        // Write fixed file (for send-backup.ps1 to find)
+        const fixedHandle   = await dirHandle.getFileHandle('trade-analyser-backup.json', { create: true });
+        const fixedWritable = await fixedHandle.createWritable();
+        await fixedWritable.write(json);
+        await fixedWritable.close();
+
+        // Write dated copy
+        const now   = new Date();
+        const stamp = now.toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
+        const datedHandle   = await dirHandle.getFileHandle(`trade-analyser-backup_${stamp}.json`, { create: true });
+        const datedWritable = await datedHandle.createWritable();
+        await datedWritable.write(json);
+        await datedWritable.close();
+
+        // Prune: keep newest 30 dated backups
+        const dated = [];
+        for await (const [name] of dirHandle.entries()) {
+          if (name.startsWith('trade-analyser-backup_') && name.endsWith('.json')) dated.push(name);
+        }
+        dated.sort().reverse(); // ISO names sort lexicographically = chronologically
+        for (const old of dated.slice(30)) await dirHandle.removeEntry(old);
+
         localStorage.setItem(BACKUP_WRITTEN_KEY, String(Date.now()));
         if (statusEl) { statusEl.textContent = 'Written ✓'; statusEl.style.color = 'var(--green)'; }
         setTimeout(() => render(), 1500);
