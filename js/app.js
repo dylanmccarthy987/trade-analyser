@@ -188,6 +188,7 @@ const App = (() => {
       const { completedTrades, openTrades } = Parser.parse(state._lastCsvText);
       Tags.applyToTrades(completedTrades);
       Tags.applyToTrades(openTrades);
+      Commissions.applyToTrades(completedTrades);
       state.trades     = completedTrades;
       state.openTrades = openTrades;
       Analytics.invalidateCache();
@@ -222,6 +223,7 @@ const App = (() => {
       const { completedTrades, openTrades } = Parser.parse(text);
       Tags.applyToTrades(completedTrades);
       Tags.applyToTrades(openTrades);
+      Commissions.applyToTrades(completedTrades);
       state.trades     = completedTrades;
       state.openTrades = openTrades;
       Analytics.invalidateCache();

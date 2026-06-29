@@ -292,7 +292,7 @@ const TradeLog = (() => {
   }
 
   function tradeRow(t) {
-    const pnl    = t.pnlEUR;
+    const pnl    = t.netPnlEUR ?? t.pnlEUR;
     const pnlCls = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'zero';
     const oppCls = t.topOpp === 'month' ? ' topopp-month' : t.topOpp === 'week' ? ' topopp-week' : '';
     const rowCls = (pnl > 0 ? 'win' : pnl < 0 ? 'loss' : '') + oppCls;
@@ -322,7 +322,7 @@ const TradeLog = (() => {
   }
 
   function spreadRow(t) {
-    const pnl    = t.pnlEUR;
+    const pnl    = t.netPnlEUR ?? t.pnlEUR;
     const pnlCls = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'zero';
     const oppCls = t.topOpp === 'month' ? ' topopp-month' : t.topOpp === 'week' ? ' topopp-week' : '';
     const rowCls = (pnl > 0 ? 'win' : pnl < 0 ? 'loss' : '') + ' spread-row' + oppCls;
@@ -350,7 +350,7 @@ const TradeLog = (() => {
   }
 
   function attemptRow(t) {
-    const pnl    = t.pnlEUR;
+    const pnl    = t.netPnlEUR ?? t.pnlEUR;
     const pnlCls = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'zero';
     const oppCls = t.topOpp === 'month' ? ' topopp-month' : t.topOpp === 'week' ? ' topopp-week' : '';
     const rowCls = (pnl > 0 ? 'win' : pnl < 0 ? 'loss' : '') + ' attempt-row' + oppCls;
@@ -543,7 +543,7 @@ const TradeLog = (() => {
 
     modal.querySelector('.modal-title').textContent = trade.product;
     modal.querySelector('.modal-sub').textContent =
-      `${trade.closeTime ? trade.closeTime.format('DD MMM YYYY HH:mm') : ''} · ${trade.direction} · ${fmtEUR(trade.pnlEUR)}`;
+      `${trade.closeTime ? trade.closeTime.format('DD MMM YYYY HH:mm') : ''} · ${trade.direction} · ${fmtEUR(trade.netPnlEUR ?? trade.pnlEUR)}`;
 
     modal.querySelector('#modal-strategy').innerHTML =
       `<option value="">— none —</option>` +

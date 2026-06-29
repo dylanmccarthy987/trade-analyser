@@ -3,29 +3,29 @@
 const Metrics = (() => {
 
   function pnl(trades) {
-    return trades.reduce((s, t) => s + (t.pnlEUR ?? 0), 0);
+    return trades.reduce((s, t) => s + ((t.netPnlEUR ?? t.pnlEUR) ?? 0), 0);
   }
 
   function winRate(trades) {
     if (!trades.length) return { rate: 0, wins: 0, losses: 0, scratches: 0, total: 0 };
-    const wins     = trades.filter(t => (t.pnlEUR ?? 0) > 0).length;
-    const losses   = trades.filter(t => (t.pnlEUR ?? 0) < 0).length;
+    const wins     = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0).length;
+    const losses   = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0).length;
     const scratches = trades.length - wins - losses;
     return { rate: (wins + losses) > 0 ? wins / (wins + losses) : 0, wins, losses, scratches, total: trades.length };
   }
 
   function profitFactor(trades) {
-    const grossWin  = trades.filter(t => (t.pnlEUR ?? 0) > 0).reduce((s, t) => s + t.pnlEUR, 0);
-    const grossLoss = trades.filter(t => (t.pnlEUR ?? 0) < 0).reduce((s, t) => s + Math.abs(t.pnlEUR), 0);
+    const grossWin  = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0).reduce((s, t) => s + (t.netPnlEUR ?? t.pnlEUR), 0);
+    const grossLoss = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0).reduce((s, t) => s + Math.abs((t.netPnlEUR ?? t.pnlEUR)), 0);
     return grossLoss === 0 ? null : grossWin / grossLoss;
   }
 
   function avgWinLoss(trades) {
-    const winners = trades.filter(t => (t.pnlEUR ?? 0) > 0);
-    const losers  = trades.filter(t => (t.pnlEUR ?? 0) < 0);
+    const winners = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0);
+    const losers  = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0);
     return {
-      avgWin:  winners.length ? winners.reduce((s, t) => s + t.pnlEUR, 0) / winners.length : 0,
-      avgLoss: losers.length  ? losers.reduce((s, t)  => s + t.pnlEUR, 0) / losers.length  : 0,
+      avgWin:  winners.length ? winners.reduce((s, t) => s + (t.netPnlEUR ?? t.pnlEUR), 0) / winners.length : 0,
+      avgLoss: losers.length  ? losers.reduce((s, t)  => s + (t.netPnlEUR ?? t.pnlEUR), 0) / losers.length  : 0,
     };
   }
 
@@ -41,7 +41,7 @@ const Metrics = (() => {
     const sorted = [...trades].sort((a, b) => (a.closeTime?.valueOf() ?? 0) - (b.closeTime?.valueOf() ?? 0));
     let count = 1;
     const last = sorted[sorted.length - 1];
-    const lastWin = (last.pnlEUR ?? 0) > 0;
+    const lastWin = (las(t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0;
     for (let i = sorted.length - 2; i >= 0; i--) {
       const isWin = (sorted[i].pnlEUR ?? 0) > 0;
       if (isWin === lastWin) count++;
@@ -56,7 +56,7 @@ const Metrics = (() => {
     for (const t of trades) {
       const d = t.closeTime ? t.closeTime.format('YYYY-MM-DD') : null;
       if (!d) continue;
-      byDay[d] = (byDay[d] ?? 0) + (t.pnlEUR ?? 0);
+      byDay[d] = (byDay[d] ?? 0) + ((t.netPnlEUR ?? t.pnlEUR) ?? 0);
     }
     const days = Object.keys(byDay).sort();
     if (!days.length) return { type: null, count: 0 };
@@ -77,9 +77,9 @@ const Metrics = (() => {
     const OUTLIER_CAP = 500000;
     const sorted = [...trades]
       .filter(t => {
-        if (!t.closeTime || t.pnlEUR === null) return false;
-        if (Math.abs(t.pnlEUR) > OUTLIER_CAP) {
-          console.warn(`[Trade Analyser] Outlier excluded from equity curve: ${t.product} pnlEUR=${t.pnlEUR.toFixed(0)} — check multiplier in Settings`);
+        if (!t.closeTime || (t.netPnlEUR ?? t.pnlEUR) === null) return false;
+        if (Math.abs((t.netPnlEUR ?? t.pnlEUR)) > OUTLIER_CAP) {
+          console.warn(`[Trade Analyser] Outlier excluded from equity curve: ${t.product} pnlEUR=${(t.netPnlEUR ?? t.pnlEUR).toFixed(0)} — check multiplier in Settings`);
           return false;
         }
         return true;
@@ -90,7 +90,7 @@ const Metrics = (() => {
     for (const t of sorted) {
       const d = t.closeTime.format('YYYY-MM-DD');
       if (!dayMap[d]) dayMap[d] = { date: d, label: t.closeTime.format('DD MMM'), pnl: 0 };
-      dayMap[d].pnl += t.pnlEUR;
+      dayMap[d].pnl += (t.netPnlEUR ?? t.pnlEUR);
     }
 
     let cum = 0;
@@ -113,16 +113,16 @@ const Metrics = (() => {
   function dailyPnl(trades) {
     const byDay = {};
     for (const t of trades) {
-      if (!t.closeTime || t.pnlEUR === null) continue;
+      if (!t.closeTime || (t.netPnlEUR ?? t.pnlEUR) === null) continue;
       const d = t.closeTime.format('YYYY-MM-DD');
-      byDay[d] = { date: d, label: t.closeTime.format('DD MMM'), pnl: (byDay[d]?.pnl ?? 0) + t.pnlEUR };
+      byDay[d] = { date: d, label: t.closeTime.format('DD MMM'), pnl: (byDay[d]?.pnl ?? 0) + (t.netPnlEUR ?? t.pnlEUR) };
     }
     return Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date));
   }
 
   // P&L histogram buckets
   function pnlHistogram(trades, buckets = 20) {
-    const vals = trades.map(t => t.pnlEUR ?? 0).filter(v => v !== 0);
+    const vals = trades.map(t => (t.netPnlEUR ?? t.pnlEUR) ?? 0).filter(v => v !== 0);
     if (!vals.length) return { labels: [], data: [] };
     const min = Math.min(...vals);
     const max = Math.max(...vals);
@@ -165,9 +165,9 @@ const Metrics = (() => {
     const map = {};
     for (let h = 0; h < 24; h++) map[h] = 0;
     for (const t of trades) {
-      if (!t.openTime || t.pnlEUR === null) continue;
+      if (!t.openTime || (t.netPnlEUR ?? t.pnlEUR) === null) continue;
       const h = t.openTime.hour();
-      map[h] += t.pnlEUR;
+      map[h] += (t.netPnlEUR ?? t.pnlEUR);
     }
     return Object.entries(map).map(([h, pnl]) => ({ hour: parseInt(h), label: `${h.toString().padStart(2,'0')}:00`, pnl }));
   }
@@ -177,9 +177,9 @@ const Metrics = (() => {
     const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const map = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
     for (const t of trades) {
-      if (!t.closeTime || t.pnlEUR === null) continue;
+      if (!t.closeTime || (t.netPnlEUR ?? t.pnlEUR) === null) continue;
       const dow = (t.closeTime.day() + 6) % 7; // dayjs: 0=Sun → convert to 0=Mon
-      map[dow] += t.pnlEUR;
+      map[dow] += (t.netPnlEUR ?? t.pnlEUR);
     }
     return labels.map((label, i) => ({ label, pnl: map[i] }));
   }
@@ -188,9 +188,9 @@ const Metrics = (() => {
   function calendarMap(trades) {
     const map = {};
     for (const t of trades) {
-      if (!t.closeTime || t.pnlEUR === null) continue;
+      if (!t.closeTime || (t.netPnlEUR ?? t.pnlEUR) === null) continue;
       const d = t.closeTime.format('YYYY-MM-DD');
-      map[d] = (map[d] ?? 0) + t.pnlEUR;
+      map[d] = (map[d] ?? 0) + (t.netPnlEUR ?? t.pnlEUR);
     }
     return map;
   }

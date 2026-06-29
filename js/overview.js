@@ -18,10 +18,12 @@ const Overview = (() => {
 
     const R               = RMode.isActive();
     const totalPnl        = R ? RMode.sumR(strat)        : Metrics.pnl(strat);
+    const totalCommission = strat.reduce((s, t) => s + (t.commissionEUR ?? 0), 0);
+    const grossPnl        = strat.reduce((s, t) => s + (t.pnlEUR ?? 0), 0);
     const _wl             = Metrics.avgWinLoss(strat);
     const _wlR            = R ? (() => {
-      const winners = strat.filter(t => (t.pnlEUR ?? 0) > 0);
-      const losers  = strat.filter(t => (t.pnlEUR ?? 0) < 0);
+      const winners = strat.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0);
+      const losers  = strat.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0);
       return {
         avgWin:  winners.length ? RMode.sumR(winners) / winners.length : 0,
         avgLoss: losers.length  ? RMode.sumR(losers)  / losers.length  : 0,
@@ -34,9 +36,9 @@ const Overview = (() => {
     if (R) {
       calMap = {};
       for (const t of calTrades) {
-        if (!t.closeTime || t.pnlEUR === null) continue;
+        if (!t.closeTime || (t.netPnlEUR ?? t.pnlEUR) === null) continue;
         const day = t.closeTime.format('YYYY-MM-DD');
-        calMap[day] = (calMap[day] ?? 0) + (RMode.toR(t.pnlEUR, t.openTime) ?? 0);
+        calMap[day] = (calMap[day] ?? 0) + (RMode.toR((t.netPnlEUR ?? t.pnlEUR), t.openTime) ?? 0);
       }
     } else {
       calMap = Metrics.calendarMap(calTrades);
@@ -52,16 +54,16 @@ const Overview = (() => {
     // Avg up day / down day
     const dailyMap = {};
     for (const t of strat) {
-      if (!t.closeTime || t.pnlEUR === null) continue;
+      if (!t.closeTime || (t.netPnlEUR ?? t.pnlEUR) === null) continue;
       const day = t.closeTime.format('YYYY-MM-DD');
-      dailyMap[day] = (dailyMap[day] ?? 0) + t.pnlEUR;
+      dailyMap[day] = (dailyMap[day] ?? 0) + (t.netPnlEUR ?? t.pnlEUR);
     }
     // Daily map — in R mode, sum R per day
     const dailyMapR = {};
     for (const t of strat) {
-      if (!t.closeTime || t.pnlEUR === null) continue;
+      if (!t.closeTime || (t.netPnlEUR ?? t.pnlEUR) === null) continue;
       const day = t.closeTime.format('YYYY-MM-DD');
-      dailyMapR[day] = (dailyMapR[day] ?? 0) + (R ? (RMode.toR(t.pnlEUR, t.openTime) ?? 0) : t.pnlEUR);
+      dailyMapR[day] = (dailyMapR[day] ?? 0) + (R ? (RMode.toR((t.netPnlEUR ?? t.pnlEUR), t.openTime) ?? 0) : (t.netPnlEUR ?? t.pnlEUR));
     }
     const upDays     = Object.values(dailyMapR).filter(v => v > 0);
     const downDays   = Object.values(dailyMapR).filter(v => v < 0);
@@ -73,14 +75,14 @@ const Overview = (() => {
     const isSingleDay = dateRange?.from && dateRange?.to && dateRange.from.isSame(dateRange.to, 'day');
     const isWeek      = dateRange?.from && dateRange?.to && !isSingleDay && dateRange.to.diff(dateRange.from, 'day') <= 6;
 
-    const wins    = strat.filter(t => (t.pnlEUR ?? 0) > 0).length;
-    const losses  = strat.filter(t => (t.pnlEUR ?? 0) < 0).length;
+    const wins    = strat.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0).length;
+    const losses  = strat.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0).length;
     const winRate = (wins + losses) > 0 ? wins / (wins + losses) : null;
 
     // Ratios
     const winLossRatio   = avgLoss   ? (Math.abs(avgWin)        / Math.abs(avgLoss)).toFixed(2)        : null;
-    const bestPnl        = R && best  ? RMode.toR(best.pnlEUR,  best.openTime)  : best?.pnlEUR;
-    const worstPnl       = R && worst ? RMode.toR(worst.pnlEUR, worst.openTime) : worst?.pnlEUR;
+    const bestPnl        = R && best  ? RMode.toR(best.netPnlEUR  ?? best.pnlEUR,  best.openTime)  : best?.netPnlEUR  ?? best?.pnlEUR;
+    const worstPnl       = R && worst ? RMode.toR(worst.netPnlEUR ?? worst.pnlEUR, worst.openTime) : worst?.netPnlEUR ?? worst?.pnlEUR;
     const bestWorstRatio = bestPnl != null && worstPnl != null ? (Math.abs(bestPnl) / Math.abs(worstPnl)).toFixed(2) : null;
     const dayRatio       = avgDownDay   ? (Math.abs(avgUpDay)    / Math.abs(avgDownDay)).toFixed(2)    : null;
     const pf             = R ? RMode.fmtR.bind(RMode) : fmtEUR;  // P&L formatter for this render
@@ -101,7 +103,7 @@ const Overview = (() => {
       </div>
 
       <div class="kpi-grid">
-        ${kpi('Total P&L', R ? RMode.fmtR(totalPnl) : fmtEUR(totalPnl), pnlCls(totalPnl), `${strat.length} trade${strat.length !== 1 ? 's' : ''}`)}
+        ${kpi('Total P&L', R ? RMode.fmtR(totalPnl) : fmtEUR(totalPnl), pnlCls(totalPnl), R ? `${strat.length} trade${strat.length !== 1 ? 's' : ''}` : `${strat.length} trade${strat.length !== 1 ? 's' : ''} · Gross ${fmtEUR(grossPnl)} · Comm ${fmtEUR(-totalCommission)}`)}
         <div class="kpi-card">
           <div class="kpi-card-dual">
             <div>
@@ -120,12 +122,12 @@ const Overview = (() => {
           <div class="kpi-card-dual">
             <div>
               <div class="kpi-label">Best Trade</div>
-              <div class="kpi-value green">${best ? (R ? RMode.fmtR(bestPnl) : fmtEUR(best.pnlEUR)) : '—'}</div>
+              <div class="kpi-value green">${best ? (R ? RMode.fmtR(bestPnl) : fmtEUR(best.netPnlEUR ?? best.pnlEUR)) : '—'}</div>
             </div>
             <div style="color:var(--border);align-self:center;font-size:18px">|</div>
             <div>
               <div class="kpi-label">Worst Trade</div>
-              <div class="kpi-value red">${worst ? (R ? RMode.fmtR(worstPnl) : fmtEUR(worst.pnlEUR)) : '—'}</div>
+              <div class="kpi-value red">${worst ? (R ? RMode.fmtR(worstPnl) : fmtEUR(worst.netPnlEUR ?? worst.pnlEUR)) : '—'}</div>
             </div>
           </div>
           ${bestWorstRatio ? `<div class="kpi-sub" style="margin-top:6px">Ratio ${bestWorstRatio}x</div>` : ''}
@@ -241,14 +243,14 @@ const Overview = (() => {
     return `<div class="recent-trades-scroll"><table class="stats-table">
       <thead><tr><th>Time</th><th>Contract</th><th>Dir</th><th>Lots</th><th>P&amp;L</th><th>Strategy</th></tr></thead>
       <tbody>${recent.map(t => {
-        const pnlCls = (t.pnlEUR ?? 0) > 0 ? 'pos' : (t.pnlEUR ?? 0) < 0 ? 'neg' : 'zero';
+        const pnlCls = ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0 ? 'pos' : ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0 ? 'neg' : 'zero';
         const strat  = [t.strategy, t.substrategy].filter(Boolean).join(' / ');
         return `<tr>
           <td class="mono">${t.openTime.format('DD MMM HH:mm')}</td>
           <td>${escHtml(t.baseProduct)}</td>
           <td><span class="dir-badge ${t.direction}">${t.direction === 'long' ? 'L' : 'S'}</span></td>
           <td class="mono">${t.totalContracts}</td>
-          <td class="pnl-cell ${pnlCls}">${RMode.fmt(t.pnlEUR, t.openTime)}</td>
+          <td class="pnl-cell ${pnlCls}">${RMode.fmt((t.netPnlEUR ?? t.pnlEUR), t.openTime)}</td>
           <td style="color:var(--muted);font-family:var(--font-sans)">${escHtml(strat)}</td>
         </tr>`;
       }).join('')}</tbody>
@@ -267,7 +269,7 @@ const Overview = (() => {
         <td>${escHtml(t.product)}</td>
         <td><span class="dir-badge ${t.direction}">${t.direction === 'long' ? 'L' : 'S'}</span></td>
         <td class="mono">${t.totalContracts}</td>
-        <td class="pnl-cell ${(t.pnlEUR ?? 0) > 0 ? 'pos' : (t.pnlEUR ?? 0) < 0 ? 'neg' : 'zero'}">${RMode.fmt(t.pnlEUR, t.openTime)}</td>
+        <td class="pnl-cell ${((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0 ? 'pos' : ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0 ? 'neg' : 'zero'}">${RMode.fmt((t.netPnlEUR ?? t.pnlEUR), t.openTime)}</td>
         <td style="color:var(--muted)">${escHtml(strat)}</td>
       </tr>`;
     }).join('');

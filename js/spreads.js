@@ -97,6 +97,8 @@ const Spreads = (() => {
       openTime:       earliest.openTime,
       closeTime:      latest.closeTime,
       pnlEUR:         totalPnl,
+      commissionEUR:  trades.reduce((s, t) => s + (t.commissionEUR ?? 0), 0),
+      netPnlEUR:      trades.every(t => t.netPnlEUR !== null && t.netPnlEUR !== undefined) ? trades.reduce((s, t) => s + (t.netPnlEUR ?? 0), 0) : null,
       assetClass:     trades[0]?.assetClass ?? '',
       // Inherit strategy/substrategy from whichever leg has it — don't rely on
       // leg order, which depends on the order trades were selected for merging.

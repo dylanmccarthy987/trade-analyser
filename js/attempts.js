@@ -57,6 +57,8 @@ const Attempts = (() => {
       openTime:       first.openTime,
       closeTime:      last.closeTime,
       pnlEUR,
+      commissionEUR:  trades.reduce((s, t) => s + (t.commissionEUR ?? 0), 0),
+      netPnlEUR:      trades.every(t => t.netPnlEUR !== null && t.netPnlEUR !== undefined) ? trades.reduce((s, t) => s + (t.netPnlEUR ?? 0), 0) : null,
       strategy:       trades.map(t => t.strategy).find(Boolean)    ?? '',
       substrategy:    trades.map(t => t.substrategy).find(Boolean) ?? '',
       notes:          trades.map(t => t.notes).filter(Boolean).join(' | '),
