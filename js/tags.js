@@ -243,7 +243,7 @@ const Tags = (() => {
   function exportAll() {
     const out = {};
     for (const [id, tag] of Object.entries(_cache)) {
-      out[id] = { strategy: tag.strategy || '', substrategy: tag.substrategy || '', notes: tag.notes || '', topOpp: tag.topOpp || '' };
+      out[id] = { strategy: tag.strategy || '', substrategy: tag.substrategy || '', notes: tag.notes || '', topOpp: tag.topOpp || '', _ts: tag._ts || 0 };
     }
     return out;
   }
