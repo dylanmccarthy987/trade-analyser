@@ -3,6 +3,7 @@ trade-analyser-backup.json
 trade-analyser-settings.json
 trade-analyser-tags.json
 Tag Backups/
+AutoBackups/
 
 # Local scripts (contain credentials)
 send-backup.ps1
