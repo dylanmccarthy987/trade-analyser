@@ -226,6 +226,7 @@ const App = (() => {
       Tags.applyToTrades(completedTrades);
       Tags.applyToTrades(openTrades);
       Commissions.applyToTrades(completedTrades);
+      RMode.applyScratch(completedTrades);
       state.trades     = completedTrades;
       state.openTrades = openTrades;
       Analytics.invalidateCache();
