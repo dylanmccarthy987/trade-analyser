@@ -326,12 +326,31 @@ const Analytics = (() => {
     if (!recent.length) return `<div class="empty-state" style="padding:20px">No closed trades in the last ${windowDays} days.</div>`;
 
     const pf = R ? RMode.fmtR.bind(RMode) : fmtEUR;
-    const rplFmt = v => R ? ((v >= 0 ? '+' : '') + v.toFixed(3) + 'R') : fmtEUR(Math.round(v));
     const arrow = pct => pct > 0.05
       ? `<span style="color:var(--green)">↑${(pct*100).toFixed(0)}%</span>`
       : pct < -0.05
       ? `<span style="color:var(--red)">↓${Math.abs(pct*100).toFixed(0)}%</span>`
-      : `<span style="color:var(--muted)">→ flat</span>`;
+      : `<span style="color:var(--muted)">→ norm</span>`;
+
+    // Build per-product historical avg lots within each strategy
+    // so we can normalize across different markets
+    const productNorm = {};   // `${strategy}||${baseProduct}` → avg lots all-time
+    for (const t of allTrades) {
+      if (!t.strategy || t.isOpen) continue;
+      const key = `${t.strategy}||${t.baseProduct}`;
+      if (!productNorm[key]) productNorm[key] = [];
+      productNorm[key].push(t.totalContracts ?? 0);
+    }
+    for (const key of Object.keys(productNorm)) {
+      const arr = productNorm[key];
+      productNorm[key] = arr.reduce((a, b) => a + b, 0) / arr.length;
+    }
+
+    // Normalized size for a single trade: lots / historical avg lots for that product+strategy
+    const normOf = t => {
+      const avg = productNorm[`${t.strategy}||${t.baseProduct}`];
+      return (avg && avg > 0) ? (t.totalContracts ?? 0) / avg : 1;
+    };
 
     const stratMap = {};
     for (const t of recent) {
@@ -340,37 +359,29 @@ const Analytics = (() => {
       stratMap[t.strategy].push(t);
     }
 
-    const allStratMap = {};
-    for (const t of allTrades) {
-      if (!t.strategy || t.isOpen) continue;
-      if (!allStratMap[t.strategy]) allStratMap[t.strategy] = [];
-      allStratMap[t.strategy].push(t);
-    }
-
     const rows = Object.entries(stratMap).map(([key, ts]) => {
-      const recentR     = R ? RMode.sumR(ts) : ts.reduce((s, t) => s + (t.netPnlEUR ?? t.pnlEUR ?? 0), 0);
-      const totalLots   = ts.reduce((s, t) => s + (t.totalContracts ?? 0), 0);
-      const recentAvg   = totalLots / ts.length;
-      const allTs       = allStratMap[key] || ts;
-      const allTimeAvg  = allTs.reduce((s, t) => s + (t.totalContracts ?? 0), 0) / allTs.length;
-      const rPerLot     = totalLots > 0 ? recentR / totalLots : null;
-      const pct         = allTimeAvg > 0 ? (recentAvg - allTimeAvg) / allTimeAvg : 0;
-      return { key, count: ts.length, recentR, recentAvg, allTimeAvg, rPerLot, pct };
+      const recentR   = R ? RMode.sumR(ts) : ts.reduce((s, t) => s + (t.netPnlEUR ?? t.pnlEUR ?? 0), 0);
+      const avgNorm   = ts.reduce((s, t) => s + normOf(t), 0) / ts.length;  // 1.0 = at norm
+      const pct       = avgNorm - 1;
+      const avgR      = recentR / ts.length;
+      return { key, count: ts.length, recentR, avgNorm, pct, avgR };
     }).sort((a, b) => b.recentR - a.recentR);
 
-    const allClosed             = allTrades.filter(t => !t.isOpen && (t.netPnlEUR ?? t.pnlEUR) !== null);
-    const recentOverallAvg      = recent.reduce((s, t) => s + (t.totalContracts ?? 0), 0) / recent.length;
-    const allTimeOverallAvg     = allClosed.reduce((s, t) => s + (t.totalContracts ?? 0), 0) / (allClosed.length || 1);
-    const overallTrend          = allTimeOverallAvg > 0 ? (recentOverallAvg - allTimeOverallAvg) / allTimeOverallAvg : 0;
+    // Overall normalized sizing across all recent trades
+    const recentNorms   = recent.filter(t => t.strategy).map(normOf);
+    const overallNorm   = recentNorms.length ? recentNorms.reduce((a, b) => a + b, 0) / recentNorms.length : 1;
+    const overallTrend  = overallNorm - 1;
 
-    const winners       = recent.filter(t => !t.isScratch && (t.netPnlEUR ?? t.pnlEUR ?? 0) > 0);
-    const losers        = recent.filter(t => !t.isScratch && (t.netPnlEUR ?? t.pnlEUR ?? 0) < 0);
-    const winAvgLots    = winners.length ? winners.reduce((s, t) => s + (t.totalContracts ?? 0), 0) / winners.length : null;
-    const lossAvgLots   = losers.length  ? losers.reduce((s, t)  => s + (t.totalContracts ?? 0), 0) / losers.length  : null;
+    // Winners vs losers normalized sizing (excluding scratches)
+    const winners     = recent.filter(t => !t.isScratch && t.strategy && (t.netPnlEUR ?? t.pnlEUR ?? 0) > 0);
+    const losers      = recent.filter(t => !t.isScratch && t.strategy && (t.netPnlEUR ?? t.pnlEUR ?? 0) < 0);
+    const winNorm     = winners.length ? winners.reduce((s, t) => s + normOf(t), 0) / winners.length : null;
+    const lossNorm    = losers.length  ? losers.reduce((s, t)  => s + normOf(t), 0) / losers.length  : null;
 
-    const pairs   = recent.filter(t => !t.isScratch);
-    const corr    = pearsonCorr(
-      pairs.map(t => t.totalContracts ?? 0),
+    // Pearson correlation: normalized size vs R outcome
+    const pairs = recent.filter(t => !t.isScratch && t.strategy);
+    const corr  = pearsonCorr(
+      pairs.map(normOf),
       pairs.map(t => RMode.toR(t.netPnlEUR ?? t.pnlEUR ?? 0, t.openTime) ?? 0)
     );
     const corrColor   = corr === null ? 'var(--muted)' : corr > 0.2 ? 'var(--green)' : corr < -0.2 ? 'var(--red)' : 'var(--muted)';
@@ -382,17 +393,21 @@ const Analytics = (() => {
     let alignMsg = '';
     if (rows.length >= 2) {
       const half   = Math.ceil(rows.length / 2);
-      const topAvg = rows.slice(0, half).reduce((s, r) => s + r.recentAvg, 0) / half;
-      const botAvg = rows.slice(half).reduce((s, r) => s + r.recentAvg, 0) / (rows.length - half);
+      const topAvg = rows.slice(0, half).reduce((s, r) => s + r.avgNorm, 0) / half;
+      const botAvg = rows.slice(half).reduce((s, r) => s + r.avgNorm, 0) / (rows.length - half);
       if (topAvg > botAvg * 1.1) {
-        alignMsg = `Your best setups are sized ${((topAvg/botAvg - 1)*100).toFixed(0)}% larger than your weaker ones — good allocation.`;
+        alignMsg = `Your best setups are sized ${((topAvg/botAvg - 1)*100).toFixed(0)}% above norm vs your weaker ones — good allocation.`;
       } else if (topAvg < botAvg * 0.9) {
-        alignMsg = `You're going ${((botAvg/topAvg - 1)*100).toFixed(0)}% bigger on your weaker setups than your best ones — consider pushing size where you're performing.`;
+        alignMsg = `You're going ${((botAvg/topAvg - 1)*100).toFixed(0)}% above norm on your weaker setups vs your best ones — consider pushing size where you're performing.`;
       } else {
-        alignMsg = `Sizing is roughly even across setups — no strong preference toward your best strategies yet.`;
+        alignMsg = `Sizing is roughly even across setups relative to your norms — no strong preference toward your best strategies yet.`;
       }
     }
 
+    const fmtNorm = pct => {
+      const sign = pct >= 0 ? '+' : '';
+      return `${sign}${(pct*100).toFixed(0)}%`;
+    };
     const lbl = R ? 'R' : '€';
     return `
       ${rows.length ? `
@@ -400,43 +415,33 @@ const Analytics = (() => {
         <thead><tr>
           <th>Setup</th>
           <th>${lbl} (${windowDays}d)</th>
-          <th>Avg lots (${windowDays}d)</th>
-          <th>vs all-time</th>
-          <th>${lbl}/lot</th>
+          <th>Sizing vs norm</th>
+          <th>Avg ${lbl}/trade</th>
         </tr></thead>
         <tbody>
           ${rows.map(r => `<tr>
             <td>${escHtml(r.key)}</td>
             <td style="color:${r.recentR >= 0 ? 'var(--green)' : 'var(--red)'}">${pf(r.recentR)}</td>
-            <td class="mono">${r.recentAvg.toFixed(1)}</td>
-            <td class="mono">${arrow(r.pct)}</td>
-            <td class="mono" style="color:${r.rPerLot !== null && r.rPerLot >= 0 ? 'var(--green)' : 'var(--red)'}">${r.rPerLot !== null ? rplFmt(r.rPerLot) : '—'}</td>
+            <td class="mono">${arrow(r.pct)} <span style="color:var(--muted);font-size:11px">${fmtNorm(r.pct)}</span></td>
+            <td class="mono" style="color:${r.avgR >= 0 ? 'var(--green)' : 'var(--red)'}">${pf(r.avgR)}</td>
           </tr>`).join('')}
         </tbody>
       </table>` : `<p style="color:var(--muted);font-size:13px;margin-bottom:16px">Tag trades with strategies to see the per-strategy breakdown.</p>`}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
         <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px">
-          <div style="font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Overall sizing trend</div>
-          <div style="font-size:20px;font-weight:500">${recentOverallAvg.toFixed(1)} lots</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px">${arrow(overallTrend)} vs ${allTimeOverallAvg.toFixed(1)} all-time avg</div>
+          <div style="font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Overall sizing vs norm</div>
+          <div style="font-size:20px;font-weight:500;color:${overallTrend > 0.05 ? 'var(--green)' : overallTrend < -0.05 ? 'var(--red)' : 'var(--text)'}">${fmtNorm(overallTrend)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">relative to per-product baseline</div>
         </div>
         <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px">
           <div style="font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Winners vs losers</div>
           <div style="font-size:15px;font-weight:500;display:flex;gap:10px;align-items:baseline">
-            <span style="color:var(--green)">${winAvgLots !== null ? winAvgLots.toFixed(1) : '—'}</span>
+            <span style="color:var(--green)">${winNorm !== null ? fmtNorm(winNorm - 1) : '—'}</span>
             <span style="font-size:11px;color:var(--muted)">wins</span>
-            <span style="color:var(--red)">${lossAvgLots !== null ? lossAvgLots.toFixed(1) : '—'}</span>
+            <span style="color:var(--red)">${lossNorm !== null ? fmtNorm(lossNorm - 1) : '—'}</span>
             <span style="font-size:11px;color:var(--muted)">losses</span>
           </div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px">${
-            winAvgLots !== null && lossAvgLots !== null && lossAvgLots > 0
-              ? winAvgLots > lossAvgLots * 1.05
-                ? `${((winAvgLots/lossAvgLots - 1)*100).toFixed(0)}% bigger on wins`
-                : lossAvgLots > winAvgLots * 1.05
-                ? `${((lossAvgLots/winAvgLots - 1)*100).toFixed(0)}% bigger on losses`
-                : 'roughly equal sizing'
-              : '&nbsp;'
-          }</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">sizing index vs product norm</div>
         </div>
         <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px">
           <div style="font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Size-outcome correlation</div>
