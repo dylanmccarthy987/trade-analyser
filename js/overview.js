@@ -22,8 +22,8 @@ const Overview = (() => {
     const grossPnl        = strat.reduce((s, t) => s + (t.pnlEUR ?? 0), 0);
     const _wl             = Metrics.avgWinLoss(strat);
     const _wlR            = R ? (() => {
-      const winners = strat.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0);
-      const losers  = strat.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0);
+      const winners = strat.filter(t => !t.isScratch && ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0);
+      const losers  = strat.filter(t => !t.isScratch && ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0);
       return {
         avgWin:  winners.length ? RMode.sumR(winners) / winners.length : 0,
         avgLoss: losers.length  ? RMode.sumR(losers)  / losers.length  : 0,
@@ -75,8 +75,8 @@ const Overview = (() => {
     const isSingleDay = dateRange?.from && dateRange?.to && dateRange.from.isSame(dateRange.to, 'day');
     const isWeek      = dateRange?.from && dateRange?.to && !isSingleDay && dateRange.to.diff(dateRange.from, 'day') <= 6;
 
-    const wins    = strat.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0).length;
-    const losses  = strat.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0).length;
+    const wins    = strat.filter(t => !t.isScratch && ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0).length;
+    const losses  = strat.filter(t => !t.isScratch && ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0).length;
     const winRate = (wins + losses) > 0 ? wins / (wins + losses) : null;
 
     // Ratios

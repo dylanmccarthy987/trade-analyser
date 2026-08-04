@@ -116,11 +116,12 @@ const RMode = (() => {
       map[key].push(t);
     }
     return Object.entries(map).map(([key, ts]) => {
-      const wr    = Metrics.winRate(ts);
-      const rVals = ts.map(t => toR(t.pnlEUR ?? 0, t.openTime) ?? 0);
-      const winR  = rVals.filter(r => r > 0);
-      const lossR = rVals.filter(r => r < 0);
-      const totalR = rVals.reduce((a, b) => a + b, 0);
+      const wr      = Metrics.winRate(ts);
+      const active  = ts.filter(t => !t.isScratch);
+      const rVals   = ts.map(t => toR(t.pnlEUR ?? 0, t.openTime) ?? 0);
+      const totalR  = rVals.reduce((a, b) => a + b, 0);
+      const winR    = active.filter(t => (t.pnlEUR ?? 0) > 0).map(t => toR(t.pnlEUR ?? 0, t.openTime) ?? 0);
+      const lossR   = active.filter(t => (t.pnlEUR ?? 0) < 0).map(t => toR(t.pnlEUR ?? 0, t.openTime) ?? 0);
       const avgWin  = winR.length  ? winR.reduce((a, b)  => a + b, 0) / winR.length  : 0;
       const avgLoss = lossR.length ? lossR.reduce((a, b) => a + b, 0) / lossR.length : 0;
       return {
@@ -198,11 +199,12 @@ const RMode = (() => {
     return Object.values(map)
       .sort((a, b) => a.key.localeCompare(b.key))
       .map(m => {
-        const wr    = Metrics.winRate(m.trades);
-        const rVals = m.trades.map(t => toR(t.pnlEUR ?? 0, t.openTime) ?? 0);
-        const winR  = rVals.filter(r => r > 0);
-        const lossR = rVals.filter(r => r < 0);
+        const wr     = Metrics.winRate(m.trades);
+        const active = m.trades.filter(t => !t.isScratch);
+        const rVals  = m.trades.map(t => toR(t.pnlEUR ?? 0, t.openTime) ?? 0);
         const totalR = rVals.reduce((a, b) => a + b, 0);
+        const winR   = active.filter(t => (t.pnlEUR ?? 0) > 0).map(t => toR(t.pnlEUR ?? 0, t.openTime) ?? 0);
+        const lossR  = active.filter(t => (t.pnlEUR ?? 0) < 0).map(t => toR(t.pnlEUR ?? 0, t.openTime) ?? 0);
         return {
           key: m.key, label: m.label, total: m.trades.length,
           wins: wr.wins, losses: wr.losses, winRate: wr.rate,
