@@ -223,6 +223,7 @@ tbody tr { border-bottom: 1px solid #ffffff08; transition: background .1s; }
 tbody tr:hover { background: #ffffff06; }
 tbody tr.win td { border-left: 3px solid var(--green); }
 tbody tr.loss td { border-left: 3px solid var(--red); }
+tbody tr.scratch td { border-left: 3px solid var(--muted); }
 tbody tr.open-pos td { border-left: 3px solid #f0a500; }
 tbody td { padding: 8px 10px; white-space: nowrap; }
 .pnl-cell.pos { color: var(--green); font-family: var(--font-mono); font-weight: 600; }

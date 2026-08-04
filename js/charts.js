@@ -150,7 +150,7 @@ const Charts = (() => {
           callbacks: { label: ctx => pnlFmt(ctx.raw) },
         }},
         scales: {
-          x: { grid: { color: GRID_COLOR }, ticks: { color: MUTED, font: FONT, callback: v => fmtEUR(v) }},
+          x: { grid: { color: GRID_COLOR }, ticks: { color: MUTED, font: FONT, callback: v => pnlFmt(v) }},
           y: { grid: { color: GRID_COLOR }, ticks: { color: MUTED, font: FONT }},
         },
       },
@@ -272,7 +272,7 @@ const Charts = (() => {
         scales: {
           ...baseScales(),
           y: { ...baseScales().y, grid: { color: GRID_COLOR },
-            ticks: { ...baseScales().y.ticks, callback: v => fmtEUR(v) }},
+            ticks: { ...baseScales().y.ticks, callback: v => pnlFmt(v) }},
         },
       },
     });

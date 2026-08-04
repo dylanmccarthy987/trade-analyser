@@ -214,6 +214,18 @@ const RMode = (() => {
       });
   }
 
+  // Mark trades with |R| < 0.05 as scratches (excluded from win% and avg win/loss)
+  function applyScratch(trades) {
+    for (const t of trades) {
+      if (t.isOpen) { t.isScratch = false; continue; }
+      const pnl = t.netPnlEUR ?? t.pnlEUR;
+      if (pnl === null || pnl === undefined) { t.isScratch = false; continue; }
+      const downside = getDownside(t.openTime);
+      if (!downside || downside <= 0) { t.isScratch = false; continue; }
+      t.isScratch = Math.abs(pnl / downside) < 0.05;
+    }
+  }
+
   // ── Export / import (included in Settings backup) ────────────────────────────
 
   function exportLog() { return getLog(); }
@@ -224,7 +236,7 @@ const RMode = (() => {
 
   return {
     isActive, toggle, getLog, getCurrent, setDownside, deleteEntry, getDownside,
-    toR, fmt, fmtR, fmtAgg, pnlLabel, sumR,
+    toR, fmt, fmtR, fmtAgg, pnlLabel, sumR, applyScratch,
     groupByR, equityCurveR, dailyPnlR, byHourR, byDowR, monthlyBreakdownR,
     exportLog, importLog,
   };

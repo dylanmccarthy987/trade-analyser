@@ -26,7 +26,7 @@ const Analytics = (() => {
       const gBy     = R ? RMode.groupByR.bind(RMode) : Metrics.groupBy.bind(Metrics);
       byStrategy    = gBy(filtered, 'strategy');
       bySubstrategy = gBy(filtered, 'substrategy');
-      byProduct     = gBy(filtered, 'baseProduct');
+      byProduct     = gBy(filtered.map(t => ({ ...t, _analyticsProduct: productDisplayKey(t) })), '_analyticsProduct');
       byClass       = gBy(filtered, 'assetClass');
       hourData      = R ? RMode.byHourR(filtered)  : Metrics.byHour(filtered);
       dowData       = R ? RMode.byDowR(filtered)   : Metrics.byDayOfWeek(filtered);
@@ -45,7 +45,7 @@ const Analytics = (() => {
 
         <div class="analytics-card wide">
           <div class="chart-title">Performance by Strategy</div>
-          ${statsTable(byStrategy)}
+          ${statsTable(byStrategy, filtered)}
         </div>
 
         <div class="analytics-card" style="height:${Math.max(220, byStrategy.length * 32 + 60)}px">
@@ -119,24 +119,39 @@ const Analytics = (() => {
     bindStrategyFilter();
   }
 
-  function statsTable(groups) {
+  function statsTable(groups, allTrades) {
     if (!groups.length) return `<div class="empty-state" style="padding:20px">Tag trades with a strategy to see breakdown.</div>`;
-    const pf  = RMode.isActive() ? RMode.fmtR.bind(RMode) : fmtEUR;
-    const lbl = RMode.isActive() ? 'R' : '€';
+    const R   = RMode.isActive();
+    const pf  = R ? RMode.fmtR.bind(RMode) : fmtEUR;
+    const lbl = R ? 'R' : '€';
+    const pnlOf = t => R ? RMode.toR(t.netPnlEUR ?? t.pnlEUR ?? 0, t.openTime) : (t.netPnlEUR ?? t.pnlEUR ?? 0);
+
+    const rows = groups.map(g => {
+      const isUntagged = g.key === '(untagged)';
+      const ts = allTrades.filter(t => isUntagged ? !t.strategy : t.strategy === g.key);
+      const winner = ts.reduce((best, t) => pnlOf(t) > pnlOf(best) ? t : best, ts[0]);
+      const loser  = ts.reduce((worst, t) => pnlOf(t) < pnlOf(worst) ? t : worst, ts[0]);
+      const maxSize = Math.max(...ts.map(t => t.totalContracts ?? 0));
+      return { g, winner, loser, maxSize };
+    });
+
     return `<table class="stats-table">
       <thead><tr>
         <th>Setup</th><th>Trades</th><th>Win%</th>
-        <th>P&amp;L (${lbl})</th><th>Avg Win</th><th>Avg Loss</th><th>Profit Factor</th>
+        <th>P&amp;L (${lbl})</th><th>Avg Win</th><th>Avg Loss</th>
+        <th>Best Trade</th><th>Worst Trade</th><th>Max Size</th>
       </tr></thead>
       <tbody>
-        ${groups.map(g => `<tr>
+        ${rows.map(({ g, winner, loser, maxSize }) => `<tr>
           <td>${escHtml(g.key)}</td>
           <td>${g.total}</td>
           <td>${fmtPct(g.winRate)}</td>
-          <td class="${g.pnl >= 0 ? 'green' : 'red'}" style="color:${g.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">${pf(g.pnl)}</td>
+          <td style="color:${g.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">${pf(g.pnl)}</td>
           <td>${pf(g.avgWin)}</td>
           <td>${pf(g.avgLoss)}</td>
-          <td>${g.profitFactor ? g.profitFactor.toFixed(2) : '—'}</td>
+          <td style="color:var(--green)">${winner ? pf(pnlOf(winner)) : '—'}</td>
+          <td style="color:var(--red)">${loser  ? pf(pnlOf(loser))  : '—'}</td>
+          <td class="mono">${maxSize}</td>
         </tr>`).join('')}
       </tbody>
     </table>`;
@@ -274,6 +289,16 @@ const Analytics = (() => {
       .replace(/\s*(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\d{2}/gi, '')
       .replace(/-$/, '')
       .trim();
+  }
+
+  // Key used for top/bottom 10 product grouping:
+  // - Outrights + attempts: unchanged (baseProduct already has no month)
+  // - Calendar spreads: strip months → "ICE Brent Crude Cal"
+  // - Inter-product spreads: strip months → "FESX / FSMI" or "ICE Brent-WTI"
+  function productDisplayKey(t) {
+    if (!t.isSpread) return t.baseProduct;
+    const stripped = stripMonths(t.baseProduct);
+    return (!stripped.includes('-') && !stripped.includes('/')) ? stripped + ' Cal' : stripped;
   }
 
   function escHtml(str) {

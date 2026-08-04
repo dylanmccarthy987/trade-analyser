@@ -295,7 +295,7 @@ const TradeLog = (() => {
     const pnl    = t.netPnlEUR ?? t.pnlEUR;
     const pnlCls = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'zero';
     const oppCls = t.topOpp === 'month' ? ' topopp-month' : t.topOpp === 'week' ? ' topopp-week' : '';
-    const rowCls = (pnl > 0 ? 'win' : pnl < 0 ? 'loss' : '') + oppCls;
+    const rowCls = (t.isScratch ? 'scratch' : pnl > 0 ? 'win' : pnl < 0 ? 'loss' : '') + oppCls;
     const tagged = t.strategy || t.substrategy || t.notes;
     const dateStr  = t.openTime ? t.openTime.format('DD MMM YY HH:mm') : '—';
     const entryStr = t.avgEntry != null ? t.avgEntry.toFixed(3) : '—';
@@ -325,7 +325,7 @@ const TradeLog = (() => {
     const pnl    = t.netPnlEUR ?? t.pnlEUR;
     const pnlCls = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'zero';
     const oppCls = t.topOpp === 'month' ? ' topopp-month' : t.topOpp === 'week' ? ' topopp-week' : '';
-    const rowCls = (pnl > 0 ? 'win' : pnl < 0 ? 'loss' : '') + ' spread-row' + oppCls;
+    const rowCls = (t.isScratch ? 'scratch' : pnl > 0 ? 'win' : pnl < 0 ? 'loss' : '') + ' spread-row' + oppCls;
     const dateStr = t.openTime ? t.openTime.format('DD MMM YY HH:mm') : '—';
     const tagged  = t.strategy || t.substrategy || t.notes;
 
@@ -353,7 +353,7 @@ const TradeLog = (() => {
     const pnl    = t.netPnlEUR ?? t.pnlEUR;
     const pnlCls = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'zero';
     const oppCls = t.topOpp === 'month' ? ' topopp-month' : t.topOpp === 'week' ? ' topopp-week' : '';
-    const rowCls = (pnl > 0 ? 'win' : pnl < 0 ? 'loss' : '') + ' attempt-row' + oppCls;
+    const rowCls = (t.isScratch ? 'scratch' : pnl > 0 ? 'win' : pnl < 0 ? 'loss' : '') + ' attempt-row' + oppCls;
     const dateStr = t.openTime ? t.openTime.format('DD MMM YY HH:mm') : '—';
     const tagged  = t.strategy || t.substrategy || t.notes;
 
@@ -469,19 +469,23 @@ const TradeLog = (() => {
     }
 
     // Merge as Attempt button — same baseProduct + direction; works for regular trades AND spread rows.
+    // Also supports extending an existing attempt by selecting it + compatible new trades.
     const mergeAttemptBtn = document.getElementById('merge-attempt-btn');
     if (mergeAttemptBtn) {
       mergeAttemptBtn.addEventListener('click', () => {
-        const checkedRows = _rows.filter(t => {
+        if (!_attemptMergeOk()) return;
+        const allChecked = _rows.filter(t => {
           const id = t.isSpread ? t.spreadId : t.isAttempt ? t.attemptId : t.tradeId;
-          return checkedIds.has(id) && !t.isAttempt;
+          return checkedIds.has(id);
         });
-        if (checkedRows.length < 2) return;
-        const first = checkedRows[0];
-        if (!checkedRows.every(t => t.baseProduct === first.baseProduct && t.direction === first.direction)) return;
-        // Store spreadId for spread rows, tradeId for regular trades
-        const ids = checkedRows.map(t => t.isSpread ? t.spreadId : t.tradeId);
-        Attempts.merge(ids);
+        const existingAttempt = allChecked.find(t => t.isAttempt);
+        const newLegs = allChecked.filter(t => !t.isAttempt);
+        const newIds  = newLegs.map(t => t.isSpread ? t.spreadId : t.tradeId);
+        if (existingAttempt) {
+          Attempts.extend(existingAttempt.attemptId, newIds);
+        } else {
+          Attempts.merge(newIds);
+        }
         Analytics.invalidateCache();
         checkedIds.clear();
         renderTable(false);
@@ -496,6 +500,24 @@ const TradeLog = (() => {
 
     // Sync bar state with current checkedIds (important after renderTable(false) preserves selection)
     updateMergeBar();
+  }
+
+  function _attemptMergeOk() {
+    const allChecked = _rows.filter(t => {
+      const id = t.isSpread ? t.spreadId : t.isAttempt ? t.attemptId : t.tradeId;
+      return checkedIds.has(id);
+    });
+    const attempts   = allChecked.filter(t => t.isAttempt);
+    const nonAttempt = allChecked.filter(t => !t.isAttempt);
+    if (attempts.length > 1) return false; // can't merge two attempts together
+    if (attempts.length === 1 && nonAttempt.length >= 1) {
+      // Extending: new trades must match the existing attempt's baseProduct
+      const anchor = attempts[0];
+      return nonAttempt.every(t => t.baseProduct === anchor.baseProduct);
+    }
+    // Fresh merge: 2+ non-attempt rows, same baseProduct
+    return nonAttempt.length >= 2
+      && nonAttempt.every(t => t.baseProduct === nonAttempt[0].baseProduct);
   }
 
   function updateMergeBar() {
@@ -513,20 +535,11 @@ const TradeLog = (() => {
       mergeBtn.style.cursor  = count >= 2 ? '' : 'default';
     }
 
-    // Attempt merge: look up checked rows from _rows (includes spread synthetics).
-    // Exclude attempt synthetics — can't nest an attempt inside another attempt.
-    // Require 2+ rows sharing the same baseProduct AND direction.
-    //   Regular trades:  direction = 'long'/'short'
-    //   Spread synthetics: direction = 'spread' — same spread type = same direction
+    // Attempt merge: 2+ raw/spread rows with same baseProduct+direction,
+    // OR 1 existing attempt + 1+ compatible raw/spread rows (extends the attempt).
     const mergeAttemptBtn = bar.querySelector('#merge-attempt-btn');
     if (mergeAttemptBtn) {
-      const checkedRows = _rows.filter(t => {
-        const id = t.isSpread ? t.spreadId : t.isAttempt ? t.attemptId : t.tradeId;
-        return checkedIds.has(id) && !t.isAttempt;
-      });
-      const attemptOk = checkedRows.length >= 2
-        && checkedRows.every(t => t.baseProduct === checkedRows[0].baseProduct)
-        && checkedRows.every(t => t.direction   === checkedRows[0].direction);
+      const attemptOk = _attemptMergeOk();
       mergeAttemptBtn.style.opacity = attemptOk ? '1' : '0.4';
       mergeAttemptBtn.style.cursor  = attemptOk ? '' : 'default';
     }

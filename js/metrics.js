@@ -8,21 +8,23 @@ const Metrics = (() => {
 
   function winRate(trades) {
     if (!trades.length) return { rate: 0, wins: 0, losses: 0, scratches: 0, total: 0 };
-    const wins     = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0).length;
-    const losses   = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0).length;
-    const scratches = trades.length - wins - losses;
+    const scratches = trades.filter(t => t.isScratch).length;
+    const wins      = trades.filter(t => !t.isScratch && ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0).length;
+    const losses    = trades.filter(t => !t.isScratch && ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0).length;
     return { rate: (wins + losses) > 0 ? wins / (wins + losses) : 0, wins, losses, scratches, total: trades.length };
   }
 
   function profitFactor(trades) {
-    const grossWin  = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0).reduce((s, t) => s + (t.netPnlEUR ?? t.pnlEUR), 0);
-    const grossLoss = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0).reduce((s, t) => s + Math.abs((t.netPnlEUR ?? t.pnlEUR)), 0);
+    const active    = trades.filter(t => !t.isScratch);
+    const grossWin  = active.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0).reduce((s, t) => s + (t.netPnlEUR ?? t.pnlEUR), 0);
+    const grossLoss = active.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0).reduce((s, t) => s + Math.abs((t.netPnlEUR ?? t.pnlEUR)), 0);
     return grossLoss === 0 ? null : grossWin / grossLoss;
   }
 
   function avgWinLoss(trades) {
-    const winners = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0);
-    const losers  = trades.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0);
+    const active  = trades.filter(t => !t.isScratch);
+    const winners = active.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) > 0);
+    const losers  = active.filter(t => ((t.netPnlEUR ?? t.pnlEUR) ?? 0) < 0);
     return {
       avgWin:  winners.length ? winners.reduce((s, t) => s + (t.netPnlEUR ?? t.pnlEUR), 0) / winners.length : 0,
       avgLoss: losers.length  ? losers.reduce((s, t)  => s + (t.netPnlEUR ?? t.pnlEUR), 0) / losers.length  : 0,

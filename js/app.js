@@ -124,6 +124,7 @@ const App = (() => {
       synthetics.push(syn);
     }
 
+    RMode.applyScratch(synthetics);
     const merged = state.trades.filter(t => !excludedIds.has(t.tradeId));
     merged.push(...synthetics);
     return merged;
@@ -189,6 +190,7 @@ const App = (() => {
       Tags.applyToTrades(completedTrades);
       Tags.applyToTrades(openTrades);
       Commissions.applyToTrades(completedTrades);
+      RMode.applyScratch(completedTrades);
       state.trades     = completedTrades;
       state.openTrades = openTrades;
       Analytics.invalidateCache();

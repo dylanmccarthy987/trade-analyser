@@ -22,6 +22,16 @@ const Attempts = (() => {
     return attemptId;
   }
 
+  // Add more trade IDs to an existing attempt
+  function extend(attemptId, additionalIds) {
+    const all = loadAll();
+    if (!all[attemptId]) return;
+    const existing = new Set(all[attemptId].tradeIds);
+    for (const id of additionalIds) existing.add(id);
+    all[attemptId].tradeIds = [...existing];
+    saveAll(all);
+  }
+
   // Delete an attempt group (restores individual trades)
   function unmerge(attemptId) {
     const all = loadAll();
@@ -80,5 +90,5 @@ const Attempts = (() => {
     }
   }
 
-  return { loadAll, merge, unmerge, buildAttemptTrade, exportAll, importAll };
+  return { loadAll, merge, extend, unmerge, buildAttemptTrade, exportAll, importAll };
 })();

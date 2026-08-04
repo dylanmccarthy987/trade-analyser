@@ -1,16 +1,16 @@
 $backupJson = "C:\Users\dylan.mccarthy\Documents\Trade Analyser Tool\AutoBackups\trade-analyser-backup.json"
 $sendScript = "C:\Users\dylan.mccarthy\Documents\Trade Analyser Tool\send-backup.ps1"
+$logFile    = "C:\Users\dylan.mccarthy\Documents\Trade Analyser Tool\backup-email-watcher.log"
 $pollSecs   = 5
 
-if (-not (Test-Path $backupJson)) {
-    Write-Host "WARNING: $backupJson not found yet — click 'Write backup now' in the app first."
-    $lastWrite = [datetime]::MinValue
-} else {
-    $lastWrite = (Get-Item $backupJson).LastWriteTime
+function Log($msg) {
+    $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $msg"
+    Add-Content -Path $logFile -Value $line
 }
 
-Write-Host "Watching for backup changes. Press Ctrl+C to stop."
-Write-Host "---"
+Log "Watcher started"
+$lastWrite = if (Test-Path $backupJson) { (Get-Item $backupJson).LastWriteTime } else { [datetime]::MinValue }
+Log "Watching: $backupJson"
 
 while ($true) {
     Start-Sleep -Seconds $pollSecs
@@ -20,11 +20,12 @@ while ($true) {
             if ($current -ne $lastWrite) {
                 $lastWrite = $current
                 Start-Sleep -Seconds 2
-                Write-Host "$(Get-Date -Format 'HH:mm:ss')  Backup written — sending email..."
-                & powershell -NoProfile -ExecutionPolicy Bypass -File $sendScript
+                Log "Backup changed - sending email..."
+                powershell -NoProfile -ExecutionPolicy Bypass -File $sendScript >> $logFile 2>&1
+                Log "Email script done"
             }
         }
     } catch {
-        Write-Host "ERROR: $_"
+        Log "ERROR: $($_.Exception.Message)"
     }
 }
