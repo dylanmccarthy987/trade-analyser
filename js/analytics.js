@@ -40,6 +40,20 @@ const Analytics = (() => {
       <div class="analytics-grid">
 
         <div class="analytics-card wide">
+          <div class="chart-title" style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+            Sizing Discipline
+            <select id="sizing-window-select" class="log-filter" style="margin-left:auto;width:110px">
+              <option value="20"${_sizingWindow===20?' selected':''}>20 days</option>
+              <option value="30"${_sizingWindow===30?' selected':''}>30 days</option>
+              <option value="40"${_sizingWindow===40?' selected':''}>40 days</option>
+            </select>
+          </div>
+          <div id="sizing-discipline-body">
+            ${sizingDisciplineBody(trades, _sizingWindow)}
+          </div>
+        </div>
+
+        <div class="analytics-card wide">
           <div class="chart-title">Strategy Breakdown by Product</div>
           ${strategyBreakdownCard(filtered)}
         </div>
@@ -92,20 +106,6 @@ const Analytics = (() => {
         <div class="analytics-card wide">
           <div class="chart-title">Avg Win vs Avg Loss by Setup</div>
           ${avgWinLossTable(byStrategy)}
-        </div>
-
-        <div class="analytics-card wide">
-          <div class="chart-title" style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
-            Sizing Discipline
-            <select id="sizing-window-select" class="log-filter" style="margin-left:auto;width:110px">
-              <option value="20"${_sizingWindow===20?' selected':''}>20 days</option>
-              <option value="30"${_sizingWindow===30?' selected':''}>30 days</option>
-              <option value="40"${_sizingWindow===40?' selected':''}>40 days</option>
-            </select>
-          </div>
-          <div id="sizing-discipline-body">
-            ${sizingDisciplineBody(trades, _sizingWindow)}
-          </div>
         </div>
 
       </div>
