@@ -26,6 +26,15 @@ const App = (() => {
     });
   }
 
+  function _nthTradingDayAgo(n) {
+    const days = [...new Set(
+      state.trades.filter(t => !t.isOpen && t.closeTime)
+                  .map(t => t.closeTime.format('YYYY-MM-DD'))
+    )].sort().reverse();
+    const target = days[n - 1];
+    return target ? dayjs(target) : dayjs().subtract(n * 2, 'day');
+  }
+
   function applyPreset(preset) {
     const today = dayjs();
     let from = null, to = null;
@@ -37,8 +46,8 @@ const App = (() => {
       case 'last-week':  from = today.subtract(1,'week').day(0); to = today.subtract(1,'week').day(6); break;
       case 'this-month': from = today.startOf('month'); to = today.endOf('month'); break;
       case 'last-month': from = today.subtract(1,'month').startOf('month'); to = today.subtract(1,'month').endOf('month'); break;
-      case '20d':        from = today.subtract(19,'day'); to = today; break;
-      case '40d':        from = today.subtract(39,'day'); to = today; break;
+      case '20d':        from = _nthTradingDayAgo(20); to = today; break;
+      case '40d':        from = _nthTradingDayAgo(40); to = today; break;
       case 'ytd':        from = today.startOf('year'); to = today; break;
       case 'all':        from = null; to = null; break;
     }
