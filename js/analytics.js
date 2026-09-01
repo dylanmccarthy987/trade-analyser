@@ -3,7 +3,6 @@
 const Analytics = (() => {
   let _cache          = null;
   let _filteredTrades = [];
-  let _sizingWindow   = 40;
 
   function invalidateCache() { _cache = null; }
 
@@ -38,20 +37,6 @@ const Analytics = (() => {
 
     el.innerHTML = `
       <div class="analytics-grid">
-
-        <div class="analytics-card wide">
-          <div class="chart-title" style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
-            Sizing Discipline
-            <select id="sizing-window-select" class="log-filter" style="margin-left:auto;width:110px">
-              <option value="20"${_sizingWindow===20?' selected':''}>20 days</option>
-              <option value="30"${_sizingWindow===30?' selected':''}>30 days</option>
-              <option value="40"${_sizingWindow===40?' selected':''}>40 days</option>
-            </select>
-          </div>
-          <div id="sizing-discipline-body">
-            ${sizingDisciplineBody(trades, _sizingWindow)}
-          </div>
-        </div>
 
         <div class="analytics-card wide">
           <div class="chart-title">Strategy Breakdown by Product</div>
@@ -132,7 +117,6 @@ const Analytics = (() => {
     Charts.byDayOfWeek('ac-dow', dowData);
 
     bindStrategyFilter();
-    bindSizingWindow(trades);
   }
 
   function statsTable(groups, allTrades) {
@@ -295,167 +279,6 @@ const Analytics = (() => {
     sel.addEventListener('change', () => {
       tbl.innerHTML = strategyProductTable(_filteredTrades, sel.value);
     });
-  }
-
-  function bindSizingWindow(allTrades) {
-    const sel = document.getElementById('sizing-window-select');
-    if (!sel) return;
-    sel.addEventListener('change', () => {
-      _sizingWindow = parseInt(sel.value);
-      const body = document.getElementById('sizing-discipline-body');
-      if (body) body.innerHTML = sizingDisciplineBody(allTrades, _sizingWindow);
-    });
-  }
-
-  function pearsonCorr(xs, ys) {
-    const n = xs.length;
-    if (n < 3) return null;
-    const mx = xs.reduce((a, b) => a + b, 0) / n;
-    const my = ys.reduce((a, b) => a + b, 0) / n;
-    const num = xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0);
-    const dx  = Math.sqrt(xs.reduce((s, x) => s + (x - mx) ** 2, 0));
-    const dy  = Math.sqrt(ys.reduce((s, y) => s + (y - my) ** 2, 0));
-    return (dx && dy) ? num / (dx * dy) : null;
-  }
-
-  function sizingDisciplineBody(allTrades, windowDays) {
-    const R = RMode.isActive();
-
-    // Build window from the last N days you actually traded (not calendar days)
-    const tradingDays = [...new Set(
-      allTrades.filter(t => !t.isOpen && t.closeTime).map(t => t.closeTime.format('YYYY-MM-DD'))
-    )].sort().reverse();
-    const windowDaySet = new Set(tradingDays.slice(0, windowDays));
-    const recent = allTrades.filter(t => !t.isOpen && t.closeTime && windowDaySet.has(t.closeTime.format('YYYY-MM-DD')) && (t.netPnlEUR ?? t.pnlEUR) !== null);
-
-    if (!recent.length) return `<div class="empty-state" style="padding:20px">No closed trades in the last ${windowDays} days.</div>`;
-
-    const pf = R ? RMode.fmtR.bind(RMode) : fmtEUR;
-    const arrow = pct => pct > 0.05
-      ? `<span style="color:var(--green)">↑${(pct*100).toFixed(0)}%</span>`
-      : pct < -0.05
-      ? `<span style="color:var(--red)">↓${Math.abs(pct*100).toFixed(0)}%</span>`
-      : `<span style="color:var(--muted)">→ norm</span>`;
-
-    // Build per-product historical avg lots within each strategy
-    // so we can normalize across different markets
-    const productNorm = {};   // `${strategy}||${baseProduct}` → avg lots all-time
-    for (const t of allTrades) {
-      if (!t.strategy || t.isOpen) continue;
-      const key = `${t.strategy}||${t.baseProduct}`;
-      if (!productNorm[key]) productNorm[key] = [];
-      productNorm[key].push(t.totalContracts ?? 0);
-    }
-    for (const key of Object.keys(productNorm)) {
-      const arr = productNorm[key];
-      productNorm[key] = arr.reduce((a, b) => a + b, 0) / arr.length;
-    }
-
-    // Normalized size for a single trade: lots / historical avg lots for that product+strategy
-    const normOf = t => {
-      const avg = productNorm[`${t.strategy}||${t.baseProduct}`];
-      return (avg && avg > 0) ? (t.totalContracts ?? 0) / avg : 1;
-    };
-
-    const stratMap = {};
-    for (const t of recent) {
-      if (!t.strategy) continue;
-      if (!stratMap[t.strategy]) stratMap[t.strategy] = [];
-      stratMap[t.strategy].push(t);
-    }
-
-    const rows = Object.entries(stratMap).map(([key, ts]) => {
-      const recentR   = R ? RMode.sumR(ts) : ts.reduce((s, t) => s + (t.netPnlEUR ?? t.pnlEUR ?? 0), 0);
-      const avgNorm   = ts.reduce((s, t) => s + normOf(t), 0) / ts.length;  // 1.0 = at norm
-      const pct       = avgNorm - 1;
-      const avgR      = recentR / ts.length;
-      return { key, count: ts.length, recentR, avgNorm, pct, avgR };
-    }).sort((a, b) => b.recentR - a.recentR);
-
-    // Overall normalized sizing across all recent trades
-    const recentNorms   = recent.filter(t => t.strategy).map(normOf);
-    const overallNorm   = recentNorms.length ? recentNorms.reduce((a, b) => a + b, 0) / recentNorms.length : 1;
-    const overallTrend  = overallNorm - 1;
-
-    // Winners vs losers normalized sizing (excluding scratches)
-    const winners     = recent.filter(t => !t.isScratch && t.strategy && (t.netPnlEUR ?? t.pnlEUR ?? 0) > 0);
-    const losers      = recent.filter(t => !t.isScratch && t.strategy && (t.netPnlEUR ?? t.pnlEUR ?? 0) < 0);
-    const winNorm     = winners.length ? winners.reduce((s, t) => s + normOf(t), 0) / winners.length : null;
-    const lossNorm    = losers.length  ? losers.reduce((s, t)  => s + normOf(t), 0) / losers.length  : null;
-
-    // Pearson correlation: normalized size vs R outcome
-    const pairs = recent.filter(t => !t.isScratch && t.strategy);
-    const corr  = pearsonCorr(
-      pairs.map(normOf),
-      pairs.map(t => RMode.toR(t.netPnlEUR ?? t.pnlEUR ?? 0, t.openTime) ?? 0)
-    );
-    const corrColor   = corr === null ? 'var(--muted)' : corr > 0.2 ? 'var(--green)' : corr < -0.2 ? 'var(--red)' : 'var(--muted)';
-    const corrVerdict = corr === null ? 'Not enough data'
-      : corr > 0.2  ? 'Sizing up on winners'
-      : corr < -0.2 ? 'Bigger on losers'
-      : 'No clear pattern';
-
-    let alignMsg = '';
-    if (rows.length >= 2) {
-      const half   = Math.ceil(rows.length / 2);
-      const topAvg = rows.slice(0, half).reduce((s, r) => s + r.avgNorm, 0) / half;
-      const botAvg = rows.slice(half).reduce((s, r) => s + r.avgNorm, 0) / (rows.length - half);
-      if (topAvg > botAvg * 1.1) {
-        alignMsg = `Your best setups are sized ${((topAvg/botAvg - 1)*100).toFixed(0)}% above norm vs your weaker ones — good allocation.`;
-      } else if (topAvg < botAvg * 0.9) {
-        alignMsg = `You're going ${((botAvg/topAvg - 1)*100).toFixed(0)}% above norm on your weaker setups vs your best ones — consider pushing size where you're performing.`;
-      } else {
-        alignMsg = `Sizing is roughly even across setups relative to your norms — no strong preference toward your best strategies yet.`;
-      }
-    }
-
-    const fmtNorm = pct => {
-      const sign = pct >= 0 ? '+' : '';
-      return `${sign}${(pct*100).toFixed(0)}%`;
-    };
-    const lbl = R ? 'R' : '€';
-    return `
-      ${rows.length ? `
-      <table class="stats-table" style="margin-bottom:16px">
-        <thead><tr>
-          <th>Setup</th>
-          <th>${lbl} (${windowDays}d)</th>
-          <th>Sizing vs norm</th>
-          <th>Avg ${lbl}/trade</th>
-        </tr></thead>
-        <tbody>
-          ${rows.map(r => `<tr>
-            <td>${escHtml(r.key)}</td>
-            <td style="color:${r.recentR >= 0 ? 'var(--green)' : 'var(--red)'}">${pf(r.recentR)}</td>
-            <td class="mono">${arrow(r.pct)} <span style="color:var(--muted);font-size:11px">${fmtNorm(r.pct)}</span></td>
-            <td class="mono" style="color:${r.avgR >= 0 ? 'var(--green)' : 'var(--red)'}">${pf(r.avgR)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>` : `<p style="color:var(--muted);font-size:13px;margin-bottom:16px">Tag trades with strategies to see the per-strategy breakdown.</p>`}
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px">
-          <div style="font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Overall sizing vs norm</div>
-          <div style="font-size:20px;font-weight:500;color:${overallTrend > 0.05 ? 'var(--green)' : overallTrend < -0.05 ? 'var(--red)' : 'var(--text)'}">${fmtNorm(overallTrend)}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px">relative to per-product baseline</div>
-        </div>
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px">
-          <div style="font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Winners vs losers</div>
-          <div style="font-size:15px;font-weight:500;display:flex;gap:10px;align-items:baseline">
-            <span style="color:var(--green)">${winNorm !== null ? fmtNorm(winNorm - 1) : '—'}</span>
-            <span style="font-size:11px;color:var(--muted)">wins</span>
-            <span style="color:var(--red)">${lossNorm !== null ? fmtNorm(lossNorm - 1) : '—'}</span>
-            <span style="font-size:11px;color:var(--muted)">losses</span>
-          </div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px">sizing index vs product norm</div>
-        </div>
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px">
-          <div style="font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Size-outcome correlation</div>
-          <div style="font-size:20px;font-weight:500;color:${corrColor}">${corr !== null ? (corr >= 0 ? '+' : '') + corr.toFixed(2) : '—'}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px">${corrVerdict}</div>
-        </div>
-      </div>
-      ${alignMsg ? `<div style="margin-top:12px;font-size:13px;padding:10px 14px;background:var(--card);border-left:3px solid var(--accent);border-radius:0 6px 6px 0">${alignMsg}</div>` : ''}
-    `;
   }
 
   // Strips all contract month+year tokens (e.g. JUN26, Aug26) and cleans
