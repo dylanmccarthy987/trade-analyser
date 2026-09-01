@@ -319,9 +319,14 @@ const Analytics = (() => {
   }
 
   function sizingDisciplineBody(allTrades, windowDays) {
-    const R      = RMode.isActive();
-    const cutoff = dayjs().subtract(windowDays, 'day');
-    const recent = allTrades.filter(t => !t.isOpen && t.openTime && t.openTime.isAfter(cutoff) && (t.netPnlEUR ?? t.pnlEUR) !== null);
+    const R = RMode.isActive();
+
+    // Build window from the last N days you actually traded (not calendar days)
+    const tradingDays = [...new Set(
+      allTrades.filter(t => !t.isOpen && t.closeTime).map(t => t.closeTime.format('YYYY-MM-DD'))
+    )].sort().reverse();
+    const windowDaySet = new Set(tradingDays.slice(0, windowDays));
+    const recent = allTrades.filter(t => !t.isOpen && t.closeTime && windowDaySet.has(t.closeTime.format('YYYY-MM-DD')) && (t.netPnlEUR ?? t.pnlEUR) !== null);
 
     if (!recent.length) return `<div class="empty-state" style="padding:20px">No closed trades in the last ${windowDays} days.</div>`;
 
